@@ -1,0 +1,1 @@
+﻿# Optional Verilator script (stub)

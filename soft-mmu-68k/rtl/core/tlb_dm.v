@@ -1,0 +1,1 @@
+﻿// Direct-mapped TLB (stub)

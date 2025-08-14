@@ -1,0 +1,1 @@
+﻿// Simple FIFO (stub)
