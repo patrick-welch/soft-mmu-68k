@@ -1,0 +1,7 @@
+AI-Chat-Transcripts/*
+MMU-Project-Structure-Create.ps1
+Project-Structure.txt
+*.fuse_hidden*
+soft-mmu-68k.code-workspace
+soft-mmu-68k/.vscode/settings.json
+soft-mmu-68k/.vscode/tasks.json
