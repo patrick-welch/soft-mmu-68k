@@ -1,32 +1,65 @@
 # FPGA Constraint Notes
 
-The Basys 3 smoke demo uses the existing Digilent-style master XDC at:
+The Basys 3 smoke demo does not maintain a hand-written board-specific XDC.
+Instead, the Vivado source-add script filters the stock Digilent-style master
+XDC into a generated demo-only constraints file.
 
+## Generated filtered XDC flow
+
+Source files:
 - `fpga/basys3/xdc/Basys-3-Master.xdc`
+- `fpga/basys3/vivado/add_sources.tcl`
 
-This packet does not introduce a new board constraint scheme. Instead, the
-Vivado `add_sources.tcl` script derives a tiny generated XDC for the demo by
-copying only the lines needed for the current top-level ports and uncommenting
-them.
+Generated output:
+- `fpga/basys3/vivado/build/generated/basys3_mmu_demo.xdc`
 
-Expected top-level port names for the demo:
+`add_sources.tcl` reads the master XDC, strips comment markers from candidate
+lines, and keeps only lines that match the demo top plus a few required board
+properties:
+- port constraints for `clk`
+- port constraints for `btnC`
+- port constraints for `sw[15:0]`
+- port constraints for `led[15:0]`
+- the `create_clock` line for the 100 MHz oscillator
+- bottom-of-file configuration properties such as `CONFIG_VOLTAGE`, `CFGBVS`,
+  bitstream compression, config rate, and config mode
 
+This keeps the Basys 3 naming aligned with the stock master XDC while leaving
+the demo constraint set small and reviewable.
+
+## Expected top-level ports
+
+The generated XDC assumes the top module exposes exactly these board-facing
+ports:
 - `clk`
 - `btnC`
 - `sw[15:0]`
 - `led[15:0]`
 
-Assumptions behind the generated XDC:
+Those names match `fpga/basys3/tops/top_mmu_demo.v`.
 
-- `clk` is the Basys 3 100 MHz oscillator and reuses the master XDC clock pin
-  plus its `create_clock` line.
-- `btnC` is used as a simple active-high reset button for the demo top.
-- `sw[15:0]` are the only user inputs needed for the first-pass VA/control
-  selection.
-- `led[15:0]` are the only user-visible outputs needed for the compact
-  hit/fault/status/result display.
-- The master XDC configuration properties at the bottom of the file are copied
-  through unchanged.
+## Bring-up findings
 
-This keeps the board-facing naming aligned with the stock Basys 3 XDC comments
-while letting the demo remain small and reviewable.
+- `clk` correctly reuses the Basys 3 100 MHz oscillator pin and matching
+  `create_clock` entry from the master XDC.
+- `btnC` works as the active-high reset input used to restart the smoke flow.
+- `sw[15:0]` are sufficient for the current canned VA, FC, mode, and page
+  selection inputs.
+- `led[15:0]` are sufficient for the compact result display used by the demo.
+
+## Bring-up caveat
+
+The initial synthesis attempt for the Basys 3 smoke demo failed because an
+invisible non-printable/BOM-style character had made its way into the HDL
+source set. That issue was corrected in the later bring-up pass, and the later
+Vivado run succeeded, producing the smoke-demo results captured in the
+workspace note `../smoke-results/test-results.txt`.
+
+## Known issues / notes
+
+- The generated XDC is intentionally tied to the current demo top. If the top
+  module ports change, update `add_sources.tcl` so the generated filter stays in
+  sync.
+- This flow proves the current demo harness can be built and programmed on a
+  Basys 3. It does not imply a reusable generic constraints flow for future
+  boards or larger top-level integrations.
