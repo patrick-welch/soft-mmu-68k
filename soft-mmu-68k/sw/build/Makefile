@@ -15,7 +15,8 @@ export CFLAGS_68K
 
 TEST_SRCS := \
 	$(TEST_DIR)/mmu_smoke.c \
-	$(TEST_DIR)/mmu_perm.c
+	$(TEST_DIR)/perms_user_super.c \
+	$(TEST_DIR)/tlb_maintenance.c
 
 TEST_OBJS := $(patsubst $(TEST_DIR)/%.c,$(OUT_DIR)/%.o,$(TEST_SRCS))
 

@@ -50,6 +50,13 @@ This keeps the fault output stable and reviewable: malformed requests are easy t
 - Under this first-pass policy, transparent matches also bypass page-derived permission checking for an otherwise valid request. `perm_check` still rejects malformed request encodings; `tt_bypass` is not a universal escape hatch.
 - `resp_hit_o` remains reserved for translated/TLB-backed hits, so a successful transparent bypass returns `resp_valid_o=1`, `resp_fault_o=0`, identity-style `resp_pa_o`, and `resp_hit_o=0`.
 
+**Software-side validation expectations for this subset**
+- The freestanding 68k software scaffold should treat a TT match as a successful identity-style PA result, not as a translated-page hit.
+- A TT non-match should continue to expect whatever translated PA or translated miss the harness programmed for that VA/FC pair.
+- CPU/special space (`FC=3'b111`) must keep using the translated/probe path even when the logical-address high byte would otherwise match `TT0` or `TT1`.
+- Under the current first-pass policy, software permission vectors may expect TT-qualified normal-memory accesses to bypass page-derived user/supervisor denial for valid requests, but should still expect malformed request encodings to fail.
+- Targeted or whole-TLB flush structure may invalidate translated entries, but software should not claim that these shims implement full Motorola PFLUSH/PTEST/MMUSR semantics beyond the translated-vs-transparent distinction documented here.
+
 **P6b control/status meaning for TT/TTR-aware probe results**
 - `flush_ctrl` remains a control-layer shim, not a full MMUSR/PTEST implementation.
 - For `CMD_PROBE`, `status_hit_o` now means "the probe found a usable first-pass result," which can be either:
