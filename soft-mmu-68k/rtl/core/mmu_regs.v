@@ -1,6 +1,15 @@
-﻿//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // mmu_regs.v - Motorola 68k-compatible Soft MMU register block
-// Packet: P1
+//
+// Compliance notes:
+//   - MC68030 User's Manual, Section 1 "Supervisor Programming Model
+//     Supplement" (Figure 1-3): CRP, SRP, TC, TT0, TT1, MMUSR register set.
+//   - MC68851 PMMU User's Manual, Section 6.3.1 "Fault Signaling": status-class
+//     MMUSR/PSR result bits for bus error, limit, supervisor, access,
+//     write-protect, invalid, modified, and globally shared indications.
+//   - MC68851 PMMU User's Manual, Section 7 "PMOVE Instruction": software
+//     access to MMU registers; this first-pass block models MMUSR locally until
+//     dedicated translation-result producers are wired in.
 //------------------------------------------------------------------------------
 
 `timescale 1ns/1ps
@@ -36,7 +45,11 @@ module mmu_regs #(
     localparam REG_TT1   = 4'h4;
     localparam REG_MMUSR = 4'h5;
 
-    // Reset defaults per Motorola spec (placeholder values — adjust per docs/refs)
+    // First-pass reset defaults:
+    //   - TC reset = 0 disables translation immediately after reset.
+    //   - Remaining register image is initialized to zero for deterministic
+    //     power-on state while preserving the existing software-visible
+    //     register interface.
     localparam [PA_WIDTH-1:0] CRP_RST   = {PA_WIDTH{1'b0}};
     localparam [PA_WIDTH-1:0] SRP_RST   = {PA_WIDTH{1'b0}};
     localparam [31:0]         TC_RST    = 32'h0000_0000;
@@ -44,8 +57,29 @@ module mmu_regs #(
     localparam [31:0]         TT1_RST   = 32'h0000_0000;
     localparam [15:0]         MMUSR_RST = 16'h0000;
 
-    // Sticky bits mask for MMUSR (per Motorola spec — adjust to match docs/refs)
-    localparam [15:0] MMUSR_STICKY_MASK = 16'h00FF; // example: low byte is sticky
+    // MMUSR layout used here follows the 68030/68851-visible status classes:
+    //   [15] B  bus error
+    //   [14] L  limit violation
+    //   [13] S  supervisor violation
+    //   [12] A  access level violation
+    //   [11] W  write-protect violation
+    //   [10] I  invalid descriptor/page
+    //   [ 9] M  modified
+    //   [ 8]    reserved, reads as zero in this block
+    //   [ 7] G  globally shared
+    //   [ 6:4]  reserved, reads as zero in this block
+    //   [ 3:0]  level number
+    //
+    // First-pass MMUSR policy for this standalone register block:
+    //   - status-class bits are software-writeable so unit tests and early
+    //     bring-up can model MMUSR state before hardware producers exist;
+    //   - writing '1' sets/preserves a status bit, writing '0' clears it;
+    //   - level bits remain directly writeable;
+    //   - reserved bits read back as zero.
+    localparam [15:0] MMUSR_STICKY_MASK         = 16'hFE80;
+    localparam [15:0] MMUSR_LEVEL_WR_MASK       = 16'h000F;
+    localparam [15:0] MMUSR_SW_WRITABLE_MASK    = MMUSR_STICKY_MASK |
+                                                   MMUSR_LEVEL_WR_MASK;
 
     // Sequential logic
     always @(posedge clk) begin
@@ -65,10 +99,10 @@ module mmu_regs #(
                     REG_TT0:   tt0   <= wr_data;
                     REG_TT1:   tt1   <= wr_data;
                     REG_MMUSR: begin
-                        // MMUSR: writable bits + sticky bits that require explicit clear
-                        // Sticky bits clear only if written as '0'
-                        mmusr <= (mmusr & MMUSR_STICKY_MASK & ~wr_data[15:0]) |
-                                 (wr_data[15:0] & ~MMUSR_STICKY_MASK);
+                        // Software-visible first-pass MMUSR image: writable
+                        // status-class bits plus the low level field, with
+                        // reserved bits forced low.
+                        mmusr <= wr_data[15:0] & MMUSR_SW_WRITABLE_MASK;
                     end
                     default: begin
                     end
