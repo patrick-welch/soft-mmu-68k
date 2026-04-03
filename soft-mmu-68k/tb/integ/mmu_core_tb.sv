@@ -23,31 +23,23 @@
 
 module mmu_core_tb;
 
+  import tb_pkg::*;
+  import tb_utils_pkg::*;
+
   localparam int VA_WIDTH      = 16;
   localparam int PA_WIDTH      = 16;
   localparam int PAGE_SHIFT    = 8;
-  localparam int FC_WIDTH      = 3;
+  localparam int FC_WIDTH      = TB_FC_WIDTH;
   localparam int DESCR_WIDTH   = 32;
   localparam int TLB_ENTRIES   = 4;
   localparam int ATTR_WIDTH    = 5;
-  localparam int STATUS_WIDTH  = 8;
-  localparam int CMD_WIDTH     = 3;
+  localparam int STATUS_WIDTH  = TB_STATUS_BITS_W;
+  localparam int CMD_WIDTH     = TB_CMD_WIDTH;
+  localparam int RESP_FAULT_W  = TB_RESP_FAULT_WIDTH;
   localparam int VPN_WIDTH     = VA_WIDTH - PAGE_SHIFT;
   localparam int PFN_WIDTH     = PA_WIDTH - PAGE_SHIFT;
   localparam int DESCR_BYTES   = DESCR_WIDTH / 8;
   localparam int DESCR_SHIFT   = $clog2(DESCR_BYTES);
-
-  localparam logic [CMD_WIDTH-1:0] CMD_NOP         = 3'd0;
-  localparam logic [CMD_WIDTH-1:0] CMD_FLUSH_ALL   = 3'd1;
-  localparam logic [CMD_WIDTH-1:0] CMD_FLUSH_MATCH = 3'd2;
-  localparam logic [CMD_WIDTH-1:0] CMD_PROBE       = 3'd3;
-  localparam logic [CMD_WIDTH-1:0] CMD_PRELOAD     = 3'd4;
-
-  localparam logic [2:0] RESP_FAULT_NONE     = 3'd0;
-  localparam logic [2:0] RESP_FAULT_PERM     = 3'd1;
-  localparam logic [2:0] RESP_FAULT_INVALID  = 3'd2;
-  localparam logic [2:0] RESP_FAULT_UNMAPPED = 3'd3;
-  localparam logic [2:0] RESP_FAULT_BUS      = 3'd4;
 
   localparam logic [1:0] DESC_DT_PAGE = 2'b10;
   localparam logic [VA_WIDTH-1:0] VA_HIT   = 16'h1234;
@@ -71,7 +63,7 @@ module mmu_core_tb;
   logic [PA_WIDTH-1:0]     resp_pa;
   logic                    resp_hit;
   logic                    resp_fault;
-  logic [2:0]              resp_fault_code;
+  logic [RESP_FAULT_W-1:0] resp_fault_code;
   logic [4:0]              resp_perm_fault;
 
   logic                    reg_wr_en;
@@ -117,16 +109,17 @@ module mmu_core_tb;
     .ATTR_WIDTH    (ATTR_WIDTH),
     .STATUS_WIDTH  (STATUS_WIDTH),
     .CMD_WIDTH     (CMD_WIDTH),
-    .CMD_NOP       (CMD_NOP),
-    .CMD_FLUSH_ALL (CMD_FLUSH_ALL),
-    .CMD_FLUSH_MATCH(CMD_FLUSH_MATCH),
-    .CMD_PROBE     (CMD_PROBE),
-    .CMD_PRELOAD   (CMD_PRELOAD),
-    .RESP_FAULT_NONE    (RESP_FAULT_NONE),
-    .RESP_FAULT_PERM    (RESP_FAULT_PERM),
-    .RESP_FAULT_INVALID (RESP_FAULT_INVALID),
-    .RESP_FAULT_UNMAPPED(RESP_FAULT_UNMAPPED),
-    .RESP_FAULT_BUS     (RESP_FAULT_BUS)
+    .CMD_NOP       (TB_CMD_NOP),
+    .CMD_FLUSH_ALL (TB_CMD_FLUSH_ALL),
+    .CMD_FLUSH_MATCH(TB_CMD_FLUSH_MATCH),
+    .CMD_PROBE     (TB_CMD_PROBE),
+    .CMD_PRELOAD   (TB_CMD_PRELOAD),
+    .RESP_FAULT_W       (RESP_FAULT_W),
+    .RESP_FAULT_NONE    (TB_RESP_FAULT_NONE),
+    .RESP_FAULT_PERM    (TB_RESP_FAULT_PERM),
+    .RESP_FAULT_INVALID (TB_RESP_FAULT_INVALID),
+    .RESP_FAULT_UNMAPPED(TB_RESP_FAULT_UNMAPPED),
+    .RESP_FAULT_BUS     (TB_RESP_FAULT_BUS)
   ) dut (
     .clk                (clk),
     .rst_n              (rst_n),
@@ -213,7 +206,7 @@ module mmu_core_tb;
       reg_addr    = '0;
       reg_wr_data = '0;
       cmd_valid   = 1'b0;
-      cmd_op      = CMD_NOP;
+      cmd_op      = TB_CMD_NOP;
       cmd_addr    = '0;
       cmd_fc      = '0;
     end
@@ -253,7 +246,7 @@ module mmu_core_tb;
     input logic                fetch_i
   );
     begin
-      assert(req_ready === 1'b1) else $fatal(1, "request port not ready");
+      `TB_FATAL_IF_FALSE("request port ready before issuing CPU request", req_ready)
       req_valid = 1'b1;
       req_va    = va_i;
       req_fc    = fc_i;
@@ -271,12 +264,12 @@ module mmu_core_tb;
   endtask
 
   task automatic command_issue(
-    input logic [CMD_WIDTH-1:0] op_i,
+    input tb_cmd_op_e           op_i,
     input logic [VA_WIDTH-1:0]  addr_i,
     input logic [FC_WIDTH-1:0]  fc_i
   );
     begin
-      assert(cmd_ready === 1'b1) else $fatal(1, "command port not ready");
+      `TB_FATAL_IF_FALSE("command port ready before issuing MMU command", cmd_ready)
       cmd_valid = 1'b1;
       cmd_op    = op_i;
       cmd_addr  = addr_i;
@@ -285,64 +278,52 @@ module mmu_core_tb;
       #10;
       /* verilator lint_on STMTDLY */
       cmd_valid = 1'b0;
-      cmd_op    = CMD_NOP;
+      cmd_op    = TB_CMD_NOP;
       cmd_addr  = '0;
       cmd_fc    = '0;
     end
   endtask
 
   task automatic wait_for_resp;
-    integer cycles;
     begin
-      cycles = 0;
-      while (resp_valid !== 1'b1) begin
-        /* verilator lint_off STMTDLY */
-        #10;
-        /* verilator lint_on STMTDLY */
-        cycles = cycles + 1;
-        if (cycles > 12) begin
-          $fatal(1, "timed out waiting for translation response");
-        end
-      end
+      `TB_WAIT_UNTIL("translation response", 13,
+                     begin
+                       /* verilator lint_off STMTDLY */
+                       #10;
+                       /* verilator lint_on STMTDLY */
+                     end,
+                     resp_valid)
     end
   endtask
 
   task automatic wait_for_status;
-    integer cycles;
     begin
-      cycles = 0;
-      while (status_valid !== 1'b1) begin
-        /* verilator lint_off STMTDLY */
-        #10;
-        /* verilator lint_on STMTDLY */
-        cycles = cycles + 1;
-        if (cycles > 12) begin
-          $fatal(1, "timed out waiting for command status");
-        end
-      end
+      `TB_WAIT_UNTIL("command status", 13,
+                     begin
+                       /* verilator lint_off STMTDLY */
+                       #10;
+                       /* verilator lint_on STMTDLY */
+                     end,
+                     status_valid)
     end
   endtask
 
   task automatic wait_until_idle;
-    integer cycles;
     begin
-      cycles = 0;
-      while (busy !== 1'b0) begin
-        /* verilator lint_off STMTDLY */
-        #10;
-        /* verilator lint_on STMTDLY */
-        cycles = cycles + 1;
-        if (cycles > 12) begin
-          $fatal(1, "timed out waiting for core idle");
-        end
-      end
+      `TB_WAIT_UNTIL("core idle", 13,
+                     begin
+                       /* verilator lint_off STMTDLY */
+                       #10;
+                       /* verilator lint_on STMTDLY */
+                     end,
+                     !busy)
     end
   endtask
 
   initial begin
     clear_inputs();
     clear_memory();
-    rst_n = 1'b1;
+    tb_release_reset(rst_n);
 
     mem_desc[VA_HIT[VA_WIDTH-1:PAGE_SHIFT]]  = make_page_desc(1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA1);
     mem_desc[VA_MISS[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 8'hB2);
@@ -352,9 +333,9 @@ module mmu_core_tb;
 
     /* verilator lint_off STMTDLY */
     #20;
-    rst_n = 1'b0;
+    tb_assert_reset(rst_n);
     #20;
-    rst_n = 1'b1;
+    tb_release_reset(rst_n);
     #10;
     /* verilator lint_on STMTDLY */
 
@@ -362,62 +343,59 @@ module mmu_core_tb;
     reg_write(4'h2, 32'h0000_0080);
 
     // Preload path followed by probe and a CPU-side TLB hit.
-    command_issue(CMD_PRELOAD, VA_HIT, FC_USER_DATA);
+    command_issue(TB_CMD_PRELOAD, VA_HIT, FC_USER_DATA);
     wait_for_status();
-    assert(status_cmd === CMD_PRELOAD) else $fatal(1, "preload status command mismatch");
+    `TB_FATAL_IF_NOT_EQUAL("preload status command", TB_CMD_PRELOAD, status_cmd)
     wait_until_idle();
 
-    command_issue(CMD_PROBE, VA_HIT, FC_USER_DATA);
+    command_issue(TB_CMD_PROBE, VA_HIT, FC_USER_DATA);
     wait_for_status();
-    assert(status_cmd === CMD_PROBE) else $fatal(1, "probe status command mismatch");
-    assert(status_hit === 1'b1) else $fatal(1, "probe should hit after preload");
-    assert(status_pa === 16'hA134) else $fatal(1, "probe PA mismatch exp=A134 got=%h", status_pa);
-    assert(status_bits[4:0] === 5'b00101) else $fatal(1, "probe attrs mismatch exp=00101 got=%b", status_bits[4:0]);
+    `TB_FATAL_IF_NOT_EQUAL("probe status command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("probe hits after preload", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("probe PA", 16'hA134, status_pa)
+    `TB_FATAL_IF_NOT_EQUAL("probe attrs", 5'b00101, status_bits[4:0])
 
     cpu_request(VA_HIT, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
-    assert(resp_hit === 1'b1) else $fatal(1, "expected direct TLB hit");
-    assert(resp_fault === 1'b0) else $fatal(1, "unexpected fault on hit path");
-    assert(resp_pa === 16'hA134) else $fatal(1, "hit PA mismatch exp=A134 got=%h", resp_pa);
+    `TB_FATAL_IF_FALSE("direct TLB hit reported", resp_hit)
+    `TB_FATAL_IF_TRUE("no fault on direct hit", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("hit PA", 16'hA134, resp_pa)
 
     // Flush the matching entry, confirm the probe misses, then exercise miss->walk->refill->hit.
-    command_issue(CMD_FLUSH_MATCH, VA_HIT, FC_USER_DATA);
+    command_issue(TB_CMD_FLUSH_MATCH, VA_HIT, FC_USER_DATA);
     wait_for_status();
-    assert(status_cmd === CMD_FLUSH_MATCH) else $fatal(1, "flush-match status mismatch");
+    `TB_FATAL_IF_NOT_EQUAL("flush-match status command", TB_CMD_FLUSH_MATCH, status_cmd)
 
-    command_issue(CMD_PROBE, VA_HIT, FC_USER_DATA);
+    command_issue(TB_CMD_PROBE, VA_HIT, FC_USER_DATA);
     wait_for_status();
-    assert(status_cmd === CMD_PROBE) else $fatal(1, "post-flush probe command mismatch");
-    assert(status_hit === 1'b0) else $fatal(1, "probe should miss after targeted flush");
+    `TB_FATAL_IF_NOT_EQUAL("post-flush probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_TRUE("probe misses after targeted flush", status_hit)
 
     cpu_request(VA_MISS, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
-    assert(resp_hit === 1'b0) else $fatal(1, "first access after miss must not report hit");
-    assert(resp_fault === 1'b0) else $fatal(1, "unexpected fault on walker success");
-    assert(resp_pa === 16'hB234) else $fatal(1, "walker PA mismatch exp=B234 got=%h", resp_pa);
+    `TB_FATAL_IF_TRUE("first access after miss does not report hit", resp_hit)
+    `TB_FATAL_IF_TRUE("no fault on walker success", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("walker PA", 16'hB234, resp_pa)
 
     cpu_request(VA_MISS, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
-    assert(resp_hit === 1'b1) else $fatal(1, "second access must hit after refill");
-    assert(resp_fault === 1'b0) else $fatal(1, "unexpected fault after refill hit");
-    assert(resp_pa === 16'hB234) else $fatal(1, "refill hit PA mismatch exp=B234 got=%h", resp_pa);
+    `TB_FATAL_IF_FALSE("second access hits after refill", resp_hit)
+    `TB_FATAL_IF_TRUE("no fault after refill hit", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("refill hit PA", 16'hB234, resp_pa)
 
     // User access to a supervisor-only mapping must fault.
     cpu_request(VA_PERM, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
-    assert(resp_fault === 1'b1) else $fatal(1, "expected permission fault");
-    assert(resp_fault_code === RESP_FAULT_PERM)
-      else $fatal(1, "permission fault code mismatch exp=%0d got=%0d", RESP_FAULT_PERM, resp_fault_code);
-    assert(resp_perm_fault === 5'b01001)
-      else $fatal(1, "permission fault bits mismatch exp=01001 got=%b", resp_perm_fault);
+    `TB_FATAL_IF_FALSE("permission fault asserted", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("permission fault code", TB_RESP_FAULT_PERM, resp_fault_code)
+    `TB_FATAL_IF_NOT_EQUAL("permission fault bits", 5'b01001, resp_perm_fault)
 
     // Walker-side descriptor bus fault must report as a walker fault.
     cpu_request(VA_FAULT, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
-    assert(resp_fault === 1'b1) else $fatal(1, "expected walker fault");
-    assert(resp_fault_code === RESP_FAULT_BUS)
-      else $fatal(1, "walker bus fault code mismatch exp=%0d got=%0d", RESP_FAULT_BUS, resp_fault_code);
-    assert(resp_hit === 1'b0) else $fatal(1, "walker fault must not report hit");
+    `TB_FATAL_IF_FALSE("walker fault asserted", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("walker bus fault code", TB_RESP_FAULT_BUS, resp_fault_code)
+    `TB_FATAL_IF_TRUE("walker fault does not report hit", resp_hit)
 
     // TTR placeholder behavior is intentionally not checked here because this
     // pass does not yet decode tt0/tt1 into a transparent-bypass path.
