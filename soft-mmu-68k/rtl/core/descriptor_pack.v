@@ -87,7 +87,9 @@ module descriptor_pack #(
   input  wire        r_i_i,
   input  wire [1:0]  r_dt_i,
   input  wire [LIMIT_WIDTH-1:0] r_limit_i,
+  /* verilator lint_off UNUSED */
   input  wire [PA_WIDTH-1:0]    r_addr_i,
+  /* verilator lint_on UNUSED */
 
   // =========================
   // Pointer inputs (to pack)
@@ -96,7 +98,9 @@ module descriptor_pack #(
   input  wire        p_i_i,
   input  wire [1:0]  p_dt_i,
   input  wire [LIMIT_WIDTH-1:0] p_limit_i,
+  /* verilator lint_off UNUSED */
   input  wire [PA_WIDTH-1:0]    p_addr_i,
+  /* verilator lint_on UNUSED */
 
   // =========================
   // Page inputs (to pack)
@@ -108,7 +112,9 @@ module descriptor_pack #(
   input  wire        pg_ci_i,  // cache inhibit
   input  wire        pg_m_i,   // modified
   input  wire        pg_u_i,   // used
+  /* verilator lint_off UNUSED */
   input  wire [PA_WIDTH-1:0]    pg_pa_i,  // full PA; internally shifted to PFN
+  /* verilator lint_on UNUSED */
 
   // =========================
   // Pack output
@@ -151,6 +157,21 @@ module descriptor_pack #(
   // ----------------------------------------------------------------------------
   // Helpers
   // ----------------------------------------------------------------------------
+  // Root/pointer descriptors may expose fewer address bits than PA_WIDTH. Clamp
+  // the packed slice to the descriptor bounds and preserve the corresponding PA
+  // bit positions on unpack, zero-filling any unrepresented bits.
+  localparam integer R_ADDR_PACK_LO = (R_ADDR_LO < 0) ? 0 : R_ADDR_LO;
+  localparam integer R_ADDR_PACK_HI = (R_ADDR_HI >= DESCR_WIDTH) ? (DESCR_WIDTH-1) : R_ADDR_HI;
+  localparam integer R_ADDR_SRC_LO  = (R_ADDR_LO < 0) ? (-R_ADDR_LO) : 0;
+  localparam integer R_ADDR_PACK_W  = (R_ADDR_PACK_HI >= R_ADDR_PACK_LO) ?
+                                      (R_ADDR_PACK_HI-R_ADDR_PACK_LO+1) : 1;
+
+  localparam integer P_ADDR_PACK_LO = (P_ADDR_LO < 0) ? 0 : P_ADDR_LO;
+  localparam integer P_ADDR_PACK_HI = (P_ADDR_HI >= DESCR_WIDTH) ? (DESCR_WIDTH-1) : P_ADDR_HI;
+  localparam integer P_ADDR_SRC_LO  = (P_ADDR_LO < 0) ? (-P_ADDR_LO) : 0;
+  localparam integer P_ADDR_PACK_W  = (P_ADDR_PACK_HI >= P_ADDR_PACK_LO) ?
+                                      (P_ADDR_PACK_HI-P_ADDR_PACK_LO+1) : 1;
+
   wire [PFN_WIDTH-1:0] pg_pfn_i = (PA_WIDTH > PAGE_SHIFT) ? pg_pa_i[PA_WIDTH-1:PAGE_SHIFT] :
                                   {PFN_WIDTH{1'b0}};
 
@@ -165,14 +186,14 @@ module descriptor_pack #(
         packed_o[R_V_BIT]             = r_v_i;
         packed_o[R_I_BIT]             = r_i_i;
         packed_o[R_LIMIT_HI:R_LIMIT_LO]= r_limit_i;
-        packed_o[R_ADDR_HI:R_ADDR_LO] = r_addr_i[PA_WIDTH-1:0];
+        packed_o[R_ADDR_PACK_HI:R_ADDR_PACK_LO] = r_addr_i[R_ADDR_SRC_LO +: R_ADDR_PACK_W];
       end
       KIND_PTR: begin
         packed_o[P_DT_HI:P_DT_LO]     = p_dt_i;
         packed_o[P_V_BIT]             = p_v_i;
         packed_o[P_I_BIT]             = p_i_i;
         packed_o[P_LIMIT_HI:P_LIMIT_LO]= p_limit_i;
-        packed_o[P_ADDR_HI:P_ADDR_LO] = p_addr_i[PA_WIDTH-1:0];
+        packed_o[P_ADDR_PACK_HI:P_ADDR_PACK_LO] = p_addr_i[P_ADDR_SRC_LO +: P_ADDR_PACK_W];
       end
       KIND_PAGE: begin
         packed_o[PG_DT_HI:PG_DT_LO] = pg_dt_i;
@@ -199,14 +220,16 @@ module descriptor_pack #(
     r_v_o     = packed_i[R_V_BIT];
     r_i_o     = packed_i[R_I_BIT];
     r_limit_o = packed_i[R_LIMIT_HI:R_LIMIT_LO];
-    r_addr_o  = { { (PA_WIDTH-(R_ADDR_HI-R_ADDR_LO+1)){1'b0} }, packed_i[R_ADDR_HI:R_ADDR_LO] };
+    r_addr_o  = {PA_WIDTH{1'b0}};
+    r_addr_o[R_ADDR_SRC_LO +: R_ADDR_PACK_W] = packed_i[R_ADDR_PACK_LO +: R_ADDR_PACK_W];
 
     // Pointer
     p_dt_o    = packed_i[P_DT_HI:P_DT_LO];
     p_v_o     = packed_i[P_V_BIT];
     p_i_o     = packed_i[P_I_BIT];
     p_limit_o = packed_i[P_LIMIT_HI:P_LIMIT_LO];
-    p_addr_o  = { { (PA_WIDTH-(P_ADDR_HI-P_ADDR_LO+1)){1'b0} }, packed_i[P_ADDR_HI:P_ADDR_LO] };
+    p_addr_o  = {PA_WIDTH{1'b0}};
+    p_addr_o[P_ADDR_SRC_LO +: P_ADDR_PACK_W] = packed_i[P_ADDR_PACK_LO +: P_ADDR_PACK_W];
 
     // Page
     pg_dt_o   = packed_i[PG_DT_HI:PG_DT_LO];
@@ -219,7 +242,6 @@ module descriptor_pack #(
 
     // PFN -> PA (shift left PAGE_SHIFT)
     begin : REBUILD_PA
-      integer i;
       reg [PFN_WIDTH-1:0] pfn;
       reg [PA_WIDTH-1:0]  tmp;
       pfn = packed_i[PG_PFN_HI:PG_PFN_LO];

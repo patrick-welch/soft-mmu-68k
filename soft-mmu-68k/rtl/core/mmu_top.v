@@ -15,8 +15,12 @@ module mmu_top
   output wire                  hit,
   output wire                  fault
 );
+  // This wrapper is still a stub; fold the interface into a harmless reduction so
+  // lint knows the top-level ports are intentionally present for future wiring.
+  wire stub_inputs_seen = clk ^ rst_n ^ rw_n ^ (^va_in) ^ (^fc_in);
+
   // TODO: instantiate regs, TLB, walker, perm_check
-  assign pa_out = {PA_WIDTH{1'b0}};
-  assign hit    = 1'b0;
-  assign fault  = 1'b0;
+  assign pa_out = {PA_WIDTH{1'b0 & stub_inputs_seen}};
+  assign hit    = 1'b0 & stub_inputs_seen;
+  assign fault  = 1'b0 & stub_inputs_seen;
 endmodule

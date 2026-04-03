@@ -70,6 +70,8 @@ module mmu_regs #(
                         mmusr <= (mmusr & MMUSR_STICKY_MASK & ~wr_data[15:0]) |
                                  (wr_data[15:0] & ~MMUSR_STICKY_MASK);
                     end
+                    default: begin
+                    end
                 endcase
             end
         end
@@ -86,6 +88,7 @@ module mmu_regs #(
                 REG_TT0:   rd_data = tt0;
                 REG_TT1:   rd_data = tt1;
                 REG_MMUSR: rd_data = {16'h0000, mmusr};
+                default:   rd_data = 32'h0000_0000;
             endcase
         end
     end
