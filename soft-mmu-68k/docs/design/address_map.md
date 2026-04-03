@@ -26,12 +26,29 @@ This keeps the fault output stable and reviewable: malformed requests are easy t
 
 **CPU/special space treatment**
 - CPU/special space is not treated as program or data space in the FC decode.
-- This packet does not yet implement a full Motorola CPU-space access path; the decode simply identifies that class so higher layers can keep it separate from normal translated memory traffic.
+- In `mmu_top`, first-pass TT/TTR qualification explicitly excludes CPU/special space even if the TT region byte matches.
+- CPU/special-space accesses therefore continue down the normal translated path in this packet; no TT bypass is asserted for `FC=3'b111`.
 
 **Transparent-translation behavior in this packet**
-- TT behavior is intentionally narrow in this first pass: `perm_check` treats `tt_bypass` as an already-qualified "permission checks are skipped for this valid memory request" signal.
-- It is not a universal escape hatch for malformed requests.
-- The current packet does not yet model full Motorola TT matching, enable bits, masks, or explicit CPU-space exclusions at the top level. That qualification still belongs in the eventual TT decode/match stage before asserting `tt_bypass`.[^68030-UM-TT][^68851-UM-TT]
+- `mmu_top` now performs a narrow first-pass TT/TTR qualification before normal TLB lookup / page-walk handling and only then asserts `tt_bypass`.[^68851-UM-TT][^68030-UM-TT]
+- Implemented `TT0/TT1` image subset in this packet:
+  `TTx[31:24]` = logical-address high-byte base.
+  `TTx[23:16]` = logical-address high-byte mask, where `1` means "don't care" for the corresponding high-byte bit.
+  `TTx[15]` = entry enable.
+  `TTx[14]` = match supervisor normal-memory accesses.
+  `TTx[13]` = match user normal-memory accesses.
+  `TTx[12]` = match program space.
+  `TTx[11]` = match data space.
+- A transparent match requires:
+  the entry enabled;
+  a normal memory-space FC (`user/supervisor` × `program/data`);
+  a privilege match against `TTx[14:13]`;
+  a program/data class match against `TTx[12:11]`;
+  the masked high-byte compare to succeed.
+- CPU/special space and reserved FC encodings do not transparent-match in this first pass.
+- On a transparent match, `mmu_top` bypasses page-table translation entirely and returns an identity-style physical address by resizing the logical address onto the PA bus.
+- Under this first-pass policy, transparent matches also bypass page-derived permission checking for an otherwise valid request. `perm_check` still rejects malformed request encodings; `tt_bypass` is not a universal escape hatch.
+- `resp_hit_o` remains reserved for translated/TLB-backed hits, so a successful transparent bypass returns `resp_valid_o=1`, `resp_fault_o=0`, identity-style `resp_pa_o`, and `resp_hit_o=0`.
 
 **P6b control/status meaning for TT/TTR-aware probe results**
 - `flush_ctrl` remains a control-layer shim, not a full MMUSR/PTEST implementation.
@@ -45,14 +62,14 @@ This keeps the fault output stable and reviewable: malformed requests are easy t
 - `CMD_FLUSH_ALL`, `CMD_FLUSH_MATCH`, and `CMD_PRELOAD` keep their existing zero-status completion model in P6b.
 
 **What is still intentionally deferred**
-- Real TT register decode and mask matching in `mmu_top` or another top-level matcher.
+- Full Motorola TT register decoding beyond the narrow `TTx[31:24]`, `TTx[23:16]`, and `TTx[15:11]` subset above.
 - Architecturally complete MMUSR bit synthesis for PTEST outcomes.
 - Distinguishing every Motorola-visible PTEST termination case beyond the first-pass translated-vs-transparent classification above.
-- CPU-space legality filtering and other TT/TTR enable/exclude rules that belong in the future top-level TT match stage rather than this command/status shim.
+- CPU-space legality filtering beyond the explicit "never TT-bypass `FC=3'b111`" rule used here, plus any other Motorola TT/TTR enable/exclude rules not represented by the subset above.
 
 **Known simplifications / TODOs**
 - The page-attribute path feeding permissions still carries a compact `{S, WP, CI, M, U}` subset, so any finer Motorola execute-vs-read policy beyond the explicit permission-bank inputs remains future work.
-- A later TT packet should implement actual TT register matching and should only assert `tt_bypass` for Motorola-legal transparent-memory cases.
+- A later TT packet should implement the remaining Motorola TT register fields and should only assert `tt_bypass` for fully Motorola-legal transparent-memory cases.
 - Reserved FC encodings are only identified indirectly today by deasserting program/data/cpu-space. If the top-level interface later needs an explicit FC-valid flag, add it there rather than overloading the existing outputs.
 
 *Manual refs used:* [^PRM-FC] [^68030-UM-FC] [^68030-UM-TT] [^68851-UM-TT]

@@ -13,6 +13,8 @@
 //     "PLOAD", "PFLUSH", "PFLUSHA", and "PTEST"
 // -----------------------------------------------------------------------------
 
+`include "tb/common/tb_pkg.sv"
+`include "tb/common/tb_utils.sv"
 `include "rtl/core/mmu_regs.v"
 `include "rtl/core/mmu_decode.v"
 `include "rtl/core/perm_check.v"
@@ -40,13 +42,18 @@ module mmu_core_tb;
   localparam int PFN_WIDTH     = PA_WIDTH - PAGE_SHIFT;
   localparam int DESCR_BYTES   = DESCR_WIDTH / 8;
   localparam int DESCR_SHIFT   = $clog2(DESCR_BYTES);
+  localparam int STATUS_BIT_TT_MATCH = STATUS_WIDTH - 1;
+  localparam int STATUS_BIT_TRANSLATED = STATUS_WIDTH - 2;
 
   localparam logic [1:0] DESC_DT_PAGE = 2'b10;
   localparam logic [VA_WIDTH-1:0] VA_HIT   = 16'h1234;
   localparam logic [VA_WIDTH-1:0] VA_MISS  = 16'h2234;
   localparam logic [VA_WIDTH-1:0] VA_PERM  = 16'h3234;
+  localparam logic [VA_WIDTH-1:0] VA_TT_FALLBACK = 16'h6234;
+  localparam logic [VA_WIDTH-1:0] VA_CPU_TT = 16'h5234;
   localparam logic [VA_WIDTH-1:0] VA_FAULT = 16'h4234;
   localparam logic [FC_WIDTH-1:0] FC_USER_DATA = 3'b001;
+  localparam logic [FC_WIDTH-1:0] FC_CPU_SPACE = 3'b111;
   localparam logic [PA_WIDTH-1:0] TABLE_BASE = 16'h0200;
 
   logic                    clk;
@@ -194,6 +201,29 @@ module mmu_core_tb;
     end
   endfunction
 
+  function automatic [31:0] make_ttr(
+    input logic [7:0] base_i,
+    input logic [7:0] mask_i,
+    input logic       enable_i,
+    input logic       super_i,
+    input logic       user_i,
+    input logic       program_i,
+    input logic       data_i
+  );
+    reg [31:0] tmp;
+    begin
+      tmp = 32'h0000_0000;
+      tmp[31:24] = base_i;
+      tmp[23:16] = mask_i;
+      tmp[15]    = enable_i;
+      tmp[14]    = super_i;
+      tmp[13]    = user_i;
+      tmp[12]    = program_i;
+      tmp[11]    = data_i;
+      make_ttr   = tmp;
+    end
+  endfunction
+
   task automatic clear_inputs;
     begin
       req_valid   = 1'b0;
@@ -328,6 +358,8 @@ module mmu_core_tb;
     mem_desc[VA_HIT[VA_WIDTH-1:PAGE_SHIFT]]  = make_page_desc(1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA1);
     mem_desc[VA_MISS[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 8'hB2);
     mem_desc[VA_PERM[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 8'hC3);
+    mem_desc[VA_TT_FALLBACK[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hE6);
+    mem_desc[VA_CPU_TT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'hF5);
     mem_desc[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'hD4);
     mem_err[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = 1'b1;
 
@@ -341,6 +373,8 @@ module mmu_core_tb;
 
     reg_write(4'h0, {16'h0000, TABLE_BASE});
     reg_write(4'h2, 32'h0000_0080);
+    reg_write(4'h3, 32'h0000_0000);
+    reg_write(4'h4, 32'h0000_0000);
 
     // Preload path followed by probe and a CPU-side TLB hit.
     command_issue(TB_CMD_PRELOAD, VA_HIT, FC_USER_DATA);
@@ -390,15 +424,49 @@ module mmu_core_tb;
     `TB_FATAL_IF_NOT_EQUAL("permission fault code", TB_RESP_FAULT_PERM, resp_fault_code)
     `TB_FATAL_IF_NOT_EQUAL("permission fault bits", 5'b01001, resp_perm_fault)
 
+    // First-pass TT subset: user-data match bypasses translation and permission checks.
+    reg_write(4'h3, make_ttr(8'h32, 8'h00, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1));
+    cpu_request(VA_PERM, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_FALSE("transparent match returns a response", resp_valid)
+    `TB_FATAL_IF_TRUE("transparent match is not reported as translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("transparent match bypasses permission faulting", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("transparent match returns identity-style PA", VA_PERM, resp_pa)
+    `TB_FATAL_IF_FALSE("transparent match does not start a walk", !walk_mem_req_valid)
+
+    command_issue(TB_CMD_PROBE, VA_PERM, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("TT probe status command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("TT probe reports usable result", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("TT probe PA mirrors VA", VA_PERM, status_pa)
+    `TB_FATAL_IF_FALSE("TT probe sets TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_TRUE("TT probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+
+    // A non-matching address still falls back to the normal translation path.
+    cpu_request(VA_TT_FALLBACK, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("TT non-match first access is not a translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("TT non-match still translates successfully", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("TT non-match walker PA", 16'hE634, resp_pa)
+
+    // CPU/special space is explicitly excluded from first-pass TT matching.
+    reg_write(4'h4, make_ttr(8'h52, 8'h00, 1'b1, 1'b1, 1'b0, 1'b0, 1'b1));
+    command_issue(TB_CMD_PROBE, VA_CPU_TT, FC_CPU_SPACE);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("CPU-space probe status command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_TRUE("CPU-space probe does not use TT bypass", status_hit)
+    cpu_request(VA_CPU_TT, FC_CPU_SPACE, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("CPU-space translation first access is not a hit", resp_hit)
+    `TB_FATAL_IF_TRUE("CPU-space request still translates", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("CPU-space request uses translated PA", 16'hF534, resp_pa)
+
     // Walker-side descriptor bus fault must report as a walker fault.
     cpu_request(VA_FAULT, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
     `TB_FATAL_IF_FALSE("walker fault asserted", resp_fault)
     `TB_FATAL_IF_NOT_EQUAL("walker bus fault code", TB_RESP_FAULT_BUS, resp_fault_code)
     `TB_FATAL_IF_TRUE("walker fault does not report hit", resp_hit)
-
-    // TTR placeholder behavior is intentionally not checked here because this
-    // pass does not yet decode tt0/tt1 into a transparent-bypass path.
 
     $display("[mmu_core_tb] PASS");
     $finish;

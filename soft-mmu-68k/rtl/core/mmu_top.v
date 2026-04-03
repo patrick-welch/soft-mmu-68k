@@ -18,8 +18,11 @@
 //   - Lookup direct-mapped TLB first.
 //   - On miss, perform a minimal walker-backed refill.
 //   - On permission failure, return a fault without modeling full bus timing.
-//   - TTR/transparent translation is intentionally left as a TODO for a later
-//     packet; tt_bypass is held low in this pass.
+//   - First-pass TT/TTR qualification is implemented ahead of TLB/walker use.
+//   - This is intentionally a subset, not a full Motorola MMUSR/PTEST model.
+//   - Compliance references used by this packet's TT subset:
+//       MC68851 PMMU User's Manual, Section 4.4 "Transparent Translation"
+//       MC68030 User's Manual, Section 9 "Memory Management Unit"
 // -----------------------------------------------------------------------------
 
 module mmu_top #(
@@ -91,6 +94,8 @@ module mmu_top #(
 );
 
   localparam integer VPN_WIDTH = VA_WIDTH - PAGE_SHIFT;
+  localparam integer TTR_KEY_WIDTH = (VA_WIDTH >= 8) ? 8 : VA_WIDTH;
+  localparam integer STATUS_BIT_TT_MATCH = STATUS_WIDTH - 1;
 
   localparam [1:0] ST_IDLE       = 2'd0;
   localparam [1:0] ST_START_WALK = 2'd1;
@@ -124,6 +129,7 @@ module mmu_top #(
   wire decode_is_program;
   wire decode_is_data;
   wire decode_cpu_space;
+  wire decode_is_normal_mem;
 
   wire flush_all;
   wire flush_match;
@@ -183,6 +189,12 @@ module mmu_top #(
   wire       walk_perm_allow;
   wire [4:0] walk_perm_fault;
 
+  wire                tt0_match;
+  wire                tt1_match;
+  wire                tt_match_any;
+  wire [PA_WIDTH-1:0] tt_lookup_pa;
+  wire                tt_cpu_bypass;
+
   function automatic [2:0] user_perm_from_attr(
     input [ATTR_WIDTH-1:0] attr_i
   );
@@ -203,6 +215,60 @@ module mmu_top #(
     end
   endfunction
 
+  function automatic [PA_WIDTH-1:0] va_to_pa(
+    input [VA_WIDTH-1:0] va_i
+  );
+    integer idx;
+    begin
+      va_to_pa = {PA_WIDTH{1'b0}};
+      for (idx = 0; idx < PA_WIDTH; idx = idx + 1) begin
+        if (idx < VA_WIDTH) begin
+          va_to_pa[idx] = va_i[idx];
+        end
+      end
+    end
+  endfunction
+
+  // First-pass TT/TTR subset over the existing 32-bit TT0/TT1 register images:
+  //   [31:24] logical-address high-byte base
+  //   [23:16] logical-address high-byte mask (1 = don't care)
+  //   [15]    entry enable
+  //   [14]    match supervisor normal-memory accesses
+  //   [13]    match user normal-memory accesses
+  //   [12]    match program space
+  //   [11]    match data space
+  //
+  // CPU/special space is explicitly excluded in this first pass even if the
+  // region byte matches. A TT hit returns an identity-style PA and bypasses
+  // descriptor translation plus permission checking for a valid request.
+  /* verilator lint_off UNUSED */
+  function automatic ttr_match(
+    input [31:0]         ttr_i,
+    input [VA_WIDTH-1:0] va_i,
+    input                is_user_i,
+    input                is_program_i,
+    input                is_data_i,
+    input                is_cpu_space_i
+  );
+    reg [TTR_KEY_WIDTH-1:0] va_key_v;
+    reg [TTR_KEY_WIDTH-1:0] base_key_v;
+    reg [TTR_KEY_WIDTH-1:0] mask_key_v;
+    reg                     priv_match_v;
+    reg                     space_match_v;
+    reg                     compare_match_v;
+    begin
+      va_key_v        = va_i[VA_WIDTH-1 -: TTR_KEY_WIDTH];
+      base_key_v      = ttr_i[31 -: TTR_KEY_WIDTH];
+      mask_key_v      = ttr_i[23 -: TTR_KEY_WIDTH];
+      priv_match_v    = (is_user_i && ttr_i[13]) || (!is_user_i && ttr_i[14]);
+      space_match_v   = (is_program_i && ttr_i[12]) || (is_data_i && ttr_i[11]);
+      compare_match_v = ((va_key_v & ~mask_key_v) == (base_key_v & ~mask_key_v));
+      ttr_match = ttr_i[15] && !is_cpu_space_i && priv_match_v &&
+                  space_match_v && compare_match_v;
+    end
+  endfunction
+  /* verilator lint_on UNUSED */
+
   generate
     if (VPN_WIDTH <= 32) begin : gen_table_entries_narrow
       assign table_entries_cfg = tc_q[VPN_WIDTH-1:0];
@@ -211,9 +277,15 @@ module mmu_top #(
     end
 
     if (STATUS_WIDTH >= ATTR_WIDTH) begin : gen_probe_status_wide
-      assign probe_status_bits = {{(STATUS_WIDTH-ATTR_WIDTH){1'b0}}, tlb_lookup_attr};
+      assign probe_status_bits = tt_match_any
+                               ? ({STATUS_WIDTH{1'b0}} |
+                                  ({{(STATUS_WIDTH-1){1'b0}}, 1'b1} << STATUS_BIT_TT_MATCH))
+                               : {{(STATUS_WIDTH-ATTR_WIDTH){1'b0}}, tlb_lookup_attr};
     end else begin : gen_probe_status_narrow
-      assign probe_status_bits = tlb_lookup_attr[STATUS_WIDTH-1:0];
+      assign probe_status_bits = tt_match_any
+                               ? ({STATUS_WIDTH{1'b0}} |
+                                  ({{(STATUS_WIDTH-1){1'b0}}, 1'b1} << STATUS_BIT_TT_MATCH))
+                               : tlb_lookup_attr[STATUS_WIDTH-1:0];
     end
   endgenerate
 
@@ -240,13 +312,28 @@ module mmu_top #(
   );
 
   mmu_decode u_decode (
-    .fc        (lookup_src_cpu ? req_fc_i : pending_fc_q),
+    .fc        (lookup_fc),
     .is_user   (decode_is_user),
     .is_super  (decode_is_super),
     .is_program(decode_is_program),
     .is_data   (decode_is_data),
     .cpu_space (decode_cpu_space)
   );
+
+  assign decode_is_normal_mem = decode_is_program | decode_is_data;
+  assign tt0_match = lookup_valid &&
+                     decode_is_normal_mem &&
+                     ttr_match(tt0_q, lookup_va, decode_is_user,
+                               decode_is_program, decode_is_data,
+                               decode_cpu_space);
+  assign tt1_match = lookup_valid &&
+                     decode_is_normal_mem &&
+                     ttr_match(tt1_q, lookup_va, decode_is_user,
+                               decode_is_program, decode_is_data,
+                               decode_cpu_space);
+  assign tt_match_any  = tt0_match | tt1_match;
+  assign tt_lookup_pa  = va_to_pa(lookup_va);
+  assign tt_cpu_bypass = lookup_src_cpu && tt_match_any;
 
   perm_check u_hit_perm (
     .req_r    (lookup_src_cpu && !req_fetch_i && req_rw_i),
@@ -255,7 +342,7 @@ module mmu_top #(
     .is_user  (decode_is_user),
     .u_perm   (hit_user_perm),
     .s_perm   (hit_super_perm),
-    .tt_bypass(1'b0),
+    .tt_bypass(tt_cpu_bypass),
     .allow    (hit_perm_allow),
     .fault    (hit_perm_fault)
   );
@@ -381,9 +468,7 @@ module mmu_top #(
   assign walk_super_perm = super_perm_from_attr(walker_attr);
 
   /* verilator lint_off UNUSED */
-  wire unused_regs_decode = ^srp_q ^ ^tc_q ^ ^tt0_q ^ ^tt1_q ^ ^mmusr_q ^
-                            decode_is_super ^ decode_is_program ^
-                            decode_is_data ^ decode_cpu_space;
+  wire unused_regs_decode = ^srp_q ^ ^tc_q ^ ^mmusr_q ^ decode_is_super;
   wire unused_cmd_value = ^CMD_NOP;
   /* verilator lint_on UNUSED */
 
@@ -424,7 +509,10 @@ module mmu_top #(
       case (state_q)
         ST_IDLE: begin
           if (lookup_src_cpu) begin
-            if (tlb_lookup_hit) begin
+            if (tt_match_any) begin
+              resp_valid_o <= 1'b1;
+              resp_pa_o    <= tt_lookup_pa;
+            end else if (tlb_lookup_hit) begin
               resp_valid_o <= 1'b1;
               resp_pa_o    <= tlb_lookup_pa;
               resp_hit_o   <= 1'b1;
