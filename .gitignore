@@ -17,3 +17,6 @@ obj_dir/
 # Common generated Verilator files/binaries
 V*
 verilated*
+
+# Simulation results
+smoke-results/

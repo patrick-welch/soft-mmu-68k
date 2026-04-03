@@ -1,4 +1,4 @@
-﻿// rtl/core/mmu_decode.v
+// rtl/core/mmu_decode.v
 // Soft MMU 68k — Motorola function-code decode.
 // Combinational only. No latches.
 //

@@ -1,4 +1,4 @@
-﻿// rtl/core/perm_check.v
+// rtl/core/perm_check.v
 // Soft MMU 68k — Permission check for R/W/X under User/Supervisor.
 // Combinational only. Clean, parameterized interface.
 //
