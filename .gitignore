@@ -2,6 +2,18 @@ AI-Chat-Transcripts/*
 MMU-Project-Structure-Create.ps1
 Project-Structure.txt
 *.fuse_hidden*
+
+# VS Code workspace and settings
 soft-mmu-68k.code-workspace
 soft-mmu-68k/.vscode/settings.json
 soft-mmu-68k/.vscode/tasks.json
+
+# Verilator build artifacts
+obj_dir/
+*.o
+*.a
+*.d
+
+# Common generated Verilator files/binaries
+V*
+verilated*
