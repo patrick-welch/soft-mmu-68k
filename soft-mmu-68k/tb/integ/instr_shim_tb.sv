@@ -14,6 +14,8 @@ module instr_shim_tb;
   localparam logic [CMD_WIDTH-1:0] CMD_FLUSH_MATCH = 3'd2;
   localparam logic [CMD_WIDTH-1:0] CMD_PROBE       = 3'd3;
   localparam logic [CMD_WIDTH-1:0] CMD_PRELOAD     = 3'd4;
+  localparam int STATUS_BIT_TT_MATCH   = STATUS_WIDTH - 1;
+  localparam int STATUS_BIT_TRANSLATED = STATUS_WIDTH - 2;
 
   logic                    clk;
   logic                    rst_n;
@@ -130,6 +132,22 @@ module instr_shim_tb;
     end
   endtask
 
+  task automatic expect_status(
+    input logic [CMD_WIDTH-1:0]    exp_cmd,
+    input logic                    exp_hit,
+    input logic [PA_WIDTH-1:0]     exp_pa,
+    input logic [STATUS_WIDTH-1:0] exp_bits,
+    input string                   label_i
+  );
+    begin
+      assert(status_valid === 1'b1) else $fatal(1, "%s: status_valid missing", label_i);
+      assert(status_cmd === exp_cmd) else $fatal(1, "%s: status_cmd mismatch", label_i);
+      assert(status_hit === exp_hit) else $fatal(1, "%s: status_hit mismatch", label_i);
+      assert(status_pa === exp_pa) else $fatal(1, "%s: status_pa mismatch", label_i);
+      assert(status_bits === exp_bits) else $fatal(1, "%s: status_bits mismatch", label_i);
+    end
+  endtask
+
   task automatic expect_idle_outputs;
     begin
       assert(cmd_ready === 1'b1) else $fatal(1, "cmd_ready must be high when idle");
@@ -159,8 +177,7 @@ module instr_shim_tb;
     launch_cmd(CMD_FLUSH_ALL, 16'h0000, 3'b000);
     assert(flush_all === 1'b1) else $fatal(1, "whole flush pulse missing");
     assert(flush_match === 1'b0) else $fatal(1, "targeted flush pulse must stay low");
-    assert(status_valid === 1'b1) else $fatal(1, "whole flush status missing");
-    assert(status_cmd === CMD_FLUSH_ALL) else $fatal(1, "whole flush status cmd mismatch");
+    expect_status(CMD_FLUSH_ALL, 1'b0, {PA_WIDTH{1'b0}}, {STATUS_WIDTH{1'b0}}, "whole flush");
     assert(cmd_ready === 1'b1) else $fatal(1, "whole flush must not stall command port");
     /* verilator lint_off STMTDLY */
     #10;
@@ -173,14 +190,14 @@ module instr_shim_tb;
     assert(flush_all === 1'b0) else $fatal(1, "whole flush must stay low on targeted flush");
     assert(flush_addr === 16'h12A4) else $fatal(1, "targeted flush address mismatch");
     assert(flush_fc === 3'b101) else $fatal(1, "targeted flush FC mismatch");
-    assert(status_valid === 1'b1) else $fatal(1, "targeted flush status missing");
-    assert(status_cmd === CMD_FLUSH_MATCH) else $fatal(1, "targeted flush status cmd mismatch");
+    expect_status(CMD_FLUSH_MATCH, 1'b0, {PA_WIDTH{1'b0}}, {STATUS_WIDTH{1'b0}}, "targeted flush");
     /* verilator lint_off STMTDLY */
     #10;
     /* verilator lint_on STMTDLY */
     assert(flush_match === 1'b0) else $fatal(1, "targeted flush pulse must clear");
 
-    // Probe command emits a request pulse, stalls until response, then reports status.
+    // Probe command emits a request pulse, stalls until response, then reports
+    // either a translated hit, a transparent-bypass match, or a miss.
     launch_cmd(CMD_PROBE, 16'hBEEF, 3'b010);
     assert(probe_req_valid === 1'b1) else $fatal(1, "probe request pulse missing");
     assert(probe_addr === 16'hBEEF) else $fatal(1, "probe address mismatch");
@@ -194,7 +211,7 @@ module instr_shim_tb;
     assert(probe_req_valid === 1'b0) else $fatal(1, "probe request pulse must clear");
     probe_resp_hit    = 1'b1;
     probe_resp_pa     = 20'hA5_234;
-    probe_resp_status = 8'h96;
+    probe_resp_status = 8'h16;
     probe_resp_valid  = 1'b1;
     /* verilator lint_off STMTDLY */
     #10;
@@ -203,13 +220,46 @@ module instr_shim_tb;
     probe_resp_hit    = 1'b0;
     probe_resp_pa     = {PA_WIDTH{1'b0}};
     probe_resp_status = {STATUS_WIDTH{1'b0}};
-    assert(status_valid === 1'b1) else $fatal(1, "probe response status missing");
-    assert(status_cmd === CMD_PROBE) else $fatal(1, "probe status cmd mismatch");
-    assert(status_hit === 1'b1) else $fatal(1, "probe hit bit mismatch");
-    assert(status_pa === 20'hA5_234) else $fatal(1, "probe PA mismatch");
-    assert(status_bits === 8'h96) else $fatal(1, "probe status bits mismatch");
+    expect_status(CMD_PROBE, 1'b1, 20'hA5_234, 8'h56, "probe translated hit");
     assert(busy === 1'b0) else $fatal(1, "probe busy must clear after response");
     assert(cmd_ready === 1'b1) else $fatal(1, "probe cmd_ready must restore after response");
+    assert(status_bits[STATUS_BIT_TRANSLATED] === 1'b1) else $fatal(1, "translated probe must set translated class bit");
+    assert(status_bits[STATUS_BIT_TT_MATCH] === 1'b0) else $fatal(1, "translated probe must not set TT match class bit");
+
+    launch_cmd(CMD_PROBE, 16'h2468, 3'b001);
+    assert(probe_req_valid === 1'b1) else $fatal(1, "TT-style probe request pulse missing");
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_hit    = 1'b0;
+    probe_resp_pa     = {PA_WIDTH{1'b0}};
+    probe_resp_status = 8'h80;
+    probe_resp_valid  = 1'b1;
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_valid  = 1'b0;
+    probe_resp_status = {STATUS_WIDTH{1'b0}};
+    expect_status(CMD_PROBE, 1'b1, 20'h02468, 8'h80, "probe transparent bypass");
+    assert(status_bits[STATUS_BIT_TT_MATCH] === 1'b1) else $fatal(1, "transparent probe must set TT match class bit");
+    assert(status_bits[STATUS_BIT_TRANSLATED] === 1'b0) else $fatal(1, "transparent probe must not set translated class bit");
+
+    launch_cmd(CMD_PROBE, 16'h1357, 3'b101);
+    assert(probe_req_valid === 1'b1) else $fatal(1, "probe miss request pulse missing");
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_hit    = 1'b0;
+    probe_resp_pa     = {PA_WIDTH{1'b0}};
+    probe_resp_status = 8'h00;
+    probe_resp_valid  = 1'b1;
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_valid  = 1'b0;
+    expect_status(CMD_PROBE, 1'b0, {PA_WIDTH{1'b0}}, 8'h00, "probe miss");
+    assert(status_bits[STATUS_BIT_TT_MATCH] === 1'b0) else $fatal(1, "probe miss must not set TT match class bit");
+    assert(status_bits[STATUS_BIT_TRANSLATED] === 1'b0) else $fatal(1, "probe miss must not set translated class bit");
 
     // Preload command holds valid until the downstream request handshake completes.
     launch_cmd(CMD_PRELOAD, 16'hCAFE, 3'b111);
@@ -229,11 +279,7 @@ module instr_shim_tb;
     /* verilator lint_on STMTDLY */
     preload_req_ready = 1'b0;
     assert(preload_req_valid === 1'b0) else $fatal(1, "preload request must clear after ready");
-    assert(status_valid === 1'b1) else $fatal(1, "preload completion status missing");
-    assert(status_cmd === CMD_PRELOAD) else $fatal(1, "preload status cmd mismatch");
-    assert(status_hit === 1'b0) else $fatal(1, "preload status_hit must stay clear");
-    assert(status_pa === {PA_WIDTH{1'b0}}) else $fatal(1, "preload status_pa must stay clear");
-    assert(status_bits === {STATUS_WIDTH{1'b0}}) else $fatal(1, "preload status_bits must stay clear");
+    expect_status(CMD_PRELOAD, 1'b0, {PA_WIDTH{1'b0}}, {STATUS_WIDTH{1'b0}}, "preload complete");
     assert(busy === 1'b0) else $fatal(1, "preload busy must clear after ready");
     assert(cmd_ready === 1'b1) else $fatal(1, "preload cmd_ready must restore after ready");
 

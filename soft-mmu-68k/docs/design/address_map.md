@@ -33,6 +33,23 @@ This keeps the fault output stable and reviewable: malformed requests are easy t
 - It is not a universal escape hatch for malformed requests.
 - The current packet does not yet model full Motorola TT matching, enable bits, masks, or explicit CPU-space exclusions at the top level. That qualification still belongs in the eventual TT decode/match stage before asserting `tt_bypass`.[^68030-UM-TT][^68851-UM-TT]
 
+**P6b control/status meaning for TT/TTR-aware probe results**
+- `flush_ctrl` remains a control-layer shim, not a full MMUSR/PTEST implementation.
+- For `CMD_PROBE`, `status_hit_o` now means "the probe found a usable first-pass result," which can be either:
+  translated hit:
+  `status_hit_o = 1`, `status_bits_o[6] = 1`, `status_bits_o[7] = 0`, and `status_pa_o` is the translated physical address returned by the lower layer.
+  transparent match / transparent bypass:
+  `status_hit_o = 1`, `status_bits_o[7] = 1`, `status_bits_o[6] = 0`, and `status_pa_o` mirrors the probed logical address resized onto the PA bus because no page-table translation was consumed in this first-pass model.
+- A normal probe miss remains `status_hit_o = 0`; P6b does not force either class bit for misses.
+- The low payload bits below the top two class bits remain backend-defined. Today that means translated-probe attribute payloads can still pass through unchanged in the lower bits, while a future TT-aware responder can mark transparent bypass with bit `[7]`.
+- `CMD_FLUSH_ALL`, `CMD_FLUSH_MATCH`, and `CMD_PRELOAD` keep their existing zero-status completion model in P6b.
+
+**What is still intentionally deferred**
+- Real TT register decode and mask matching in `mmu_top` or another top-level matcher.
+- Architecturally complete MMUSR bit synthesis for PTEST outcomes.
+- Distinguishing every Motorola-visible PTEST termination case beyond the first-pass translated-vs-transparent classification above.
+- CPU-space legality filtering and other TT/TTR enable/exclude rules that belong in the future top-level TT match stage rather than this command/status shim.
+
 **Known simplifications / TODOs**
 - The page-attribute path feeding permissions still carries a compact `{S, WP, CI, M, U}` subset, so any finer Motorola execute-vs-read policy beyond the explicit permission-bank inputs remains future work.
 - A later TT packet should implement actual TT register matching and should only assert `tt_bypass` for Motorola-legal transparent-memory cases.

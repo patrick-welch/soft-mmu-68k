@@ -6,6 +6,7 @@
 //
 // Compliance:
 //   - MC68851 PMMU User's Manual, Section 5.2 "Address Translation Cache"
+//   - MC68851 PMMU User's Manual, Section 4.4 "Transparent Translation"
 //   - M68000 Family Programmer's Reference Manual, instruction entries
 //     "PFLUSH", "PFLUSHA", "PLOAD", and "PTEST"
 //
@@ -15,6 +16,13 @@
 //   - Whole-TLB flush emits a one-cycle pulse.
 //   - Address+FC targeted flush emits a one-cycle pulse with explicit operands.
 //   - Probe returns a small latched status/result record.
+//   - Probe status is first-pass TT/TTR-aware:
+//       translated result => status_hit_o=1, translated-status bit set, PA from
+//                            probe_resp_pa_i.
+//       transparent bypass => status_hit_o=1, TT-match bit set, PA mirrors the
+//                             probed VA resized to PA width.
+//       miss => status_hit_o=0, no class bits forced by this shim.
+//   - A full architecturally complete PTEST/MMUSR model remains deferred.
 //   - Preload only drives a request/ready handshake; no walk completion model yet.
 // -----------------------------------------------------------------------------
 
@@ -69,8 +77,64 @@ module flush_ctrl #(
   localparam [1:0] ST_IDLE         = 2'd0;
   localparam [1:0] ST_WAIT_PROBE   = 2'd1;
   localparam [1:0] ST_WAIT_PRELOAD = 2'd2;
+  localparam integer STATUS_BIT_TT_MATCH   = STATUS_WIDTH - 1;
+  localparam integer STATUS_BIT_TRANSLATED = STATUS_WIDTH - 2;
 
   reg [1:0] state_q;
+  reg [VA_WIDTH-1:0] probe_addr_q;
+
+  function automatic [PA_WIDTH-1:0] va_to_status_pa(
+    input [VA_WIDTH-1:0] va_i
+  );
+    integer idx;
+    begin
+      va_to_status_pa = {PA_WIDTH{1'b0}};
+      for (idx = 0; idx < PA_WIDTH; idx = idx + 1) begin
+        if (idx < VA_WIDTH) begin
+          va_to_status_pa[idx] = va_i[idx];
+        end
+      end
+    end
+  endfunction
+
+  function automatic is_tt_match_status(
+    input [STATUS_WIDTH-1:0] status_i
+  );
+    begin
+      if (STATUS_WIDTH >= 1) begin
+        is_tt_match_status = status_i[STATUS_BIT_TT_MATCH];
+      end else begin
+        is_tt_match_status = 1'b0;
+      end
+    end
+  endfunction
+
+  function automatic [STATUS_WIDTH-1:0] normalize_probe_status(
+    input                      resp_hit_i,
+    input [STATUS_WIDTH-1:0]   resp_status_i
+  );
+    reg [STATUS_WIDTH-1:0] status_v;
+    begin
+      status_v = resp_status_i;
+      if (STATUS_WIDTH >= 2) begin
+        if (is_tt_match_status(resp_status_i)) begin
+          status_v[STATUS_BIT_TRANSLATED] = 1'b0;
+        end else if (resp_hit_i) begin
+          status_v[STATUS_BIT_TRANSLATED] = 1'b1;
+        end
+      end
+      normalize_probe_status = status_v;
+    end
+  endfunction
+
+  function automatic probe_status_hit(
+    input                      resp_hit_i,
+    input [STATUS_WIDTH-1:0]   resp_status_i
+  );
+    begin
+      probe_status_hit = resp_hit_i | is_tt_match_status(resp_status_i);
+    end
+  endfunction
 
   assign cmd_ready_o = (state_q == ST_IDLE);
   assign busy_o      = (state_q != ST_IDLE);
@@ -88,6 +152,9 @@ module flush_ctrl #(
     if (STATUS_WIDTH < 1) begin
       $fatal(1, "flush_ctrl STATUS_WIDTH must be >= 1");
     end
+    if (STATUS_WIDTH < 2) begin
+      $fatal(1, "flush_ctrl STATUS_WIDTH must be >= 2 for TT/TTR-aware status classification");
+    end
     if (CMD_WIDTH < 3) begin
       $fatal(1, "flush_ctrl CMD_WIDTH must be >= 3");
     end
@@ -96,6 +163,7 @@ module flush_ctrl #(
   always @(posedge clk) begin
     if (!rst_n) begin
       state_q              <= ST_IDLE;
+      probe_addr_q         <= {VA_WIDTH{1'b0}};
       flush_all_o          <= 1'b0;
       flush_match_o        <= 1'b0;
       flush_addr_o         <= {VA_WIDTH{1'b0}};
@@ -145,6 +213,7 @@ module flush_ctrl #(
                 probe_req_valid_o <= 1'b1;
                 probe_addr_o      <= cmd_addr_i;
                 probe_fc_o        <= cmd_fc_i;
+                probe_addr_q      <= cmd_addr_i;
                 state_q           <= ST_WAIT_PROBE;
               end
 
@@ -171,9 +240,10 @@ module flush_ctrl #(
             state_q         <= ST_IDLE;
             status_valid_o  <= 1'b1;
             status_cmd_o    <= CMD_PROBE;
-            status_hit_o    <= probe_resp_hit_i;
-            status_pa_o     <= probe_resp_pa_i;
-            status_bits_o   <= probe_resp_status_i;
+            status_hit_o    <= probe_status_hit(probe_resp_hit_i, probe_resp_status_i);
+            status_pa_o     <= is_tt_match_status(probe_resp_status_i) ? va_to_status_pa(probe_addr_q)
+                                                                        : probe_resp_pa_i;
+            status_bits_o   <= normalize_probe_status(probe_resp_hit_i, probe_resp_status_i);
           end
         end
 
