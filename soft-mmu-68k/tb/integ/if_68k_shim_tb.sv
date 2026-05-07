@@ -160,6 +160,11 @@ module if_68k_shim_tb;
     input logic [RESP_FAULT_W-1:0] fault_code_i
   );
     begin
+      while (dut.req_inflight_q !== 1'b1) begin
+        /* verilator lint_off STMTDLY */
+        #10;
+        /* verilator lint_on STMTDLY */
+      end
       core_resp_valid      = 1'b1;
       core_resp_pa         = pa_i;
       core_resp_fault      = fault_i;

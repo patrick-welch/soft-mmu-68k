@@ -64,6 +64,25 @@ In the current workspace, simple unit/control benches were the most portable
 with local `iverilog`; the shared-package integration bench may require a newer
 SystemVerilog-capable simulator build depending on your tool version.
 
+### Regression scripts
+
+The scripts below capture the current first-pass known-good regression flow from
+a clean checkout. They are intentionally narrow wrappers around the proven
+Icarus and Verilator commands; they do not claim full Motorola compliance.
+
+Run them from the repo root:
+
+```sh
+scripts/run_iverilog_unit.sh
+scripts/run_iverilog_integ.sh
+scripts/run_verilator_lint.sh
+```
+
+The Verilator lint script runs with `-Wno-fatal` so accepted pre-existing
+warnings remain visible without failing the full lint pass. Current tolerated
+warnings are from delay-based testbenches and the Basys 3 smoke top's empty-pin
+and unused-signal lint findings.
+
 Unit-level packets:
 
 ```sh
