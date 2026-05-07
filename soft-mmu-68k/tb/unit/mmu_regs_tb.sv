@@ -79,13 +79,15 @@ module mmu_regs_tb;
     initial begin
         clk      = 1'b0;
         phase    = 0;
-        rst_n    = 1'b1;
+        rst_n    = 1'b0;
         wr_en    = 1'b0;
         rd_en    = 1'b0;
         addr     = 4'h0;
         wr_data  = 32'h0000_0000;
         $display("Starting mmu_regs_tb...");
     end
+
+    always #5 clk = ~clk;
 
     always @(negedge clk) begin
         wr_en   <= 1'b0;

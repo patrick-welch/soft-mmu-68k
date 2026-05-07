@@ -1,4 +1,4 @@
-﻿// tb/unit/perm_check_tb.sv
+// tb/unit/perm_check_tb.sv
 
 `timescale 1ns/1ps
 
@@ -47,7 +47,7 @@ module perm_check_tb;
     );
 
     // Reference model (mirrors RTL intent)
-    function automatic void ref_model
+    task automatic ref_model
     (
         input  logic       f_req_r, f_req_w, f_req_x,
         input  logic       f_is_user,
@@ -105,7 +105,7 @@ module perm_check_tb;
 
         f_fault = bad_req ? FAULT_BAD_REQ
                           : {1'b0, priv_rel, no_exec, wr_prot, no_read};
-    endfunction
+    endtask
 
     int errors;
     logic       r_allow;
@@ -131,6 +131,7 @@ module perm_check_tb;
             u_perm = t_u_perm;
             s_perm = t_s_perm;
             tt_bypass = t_tt_bypass;
+            #1;
 
             if ((allow !== exp_allow) || (fault !== exp_fault)) begin
                 $error("%s: allow exp=%0b got=%0b fault exp=%05b got=%05b",
@@ -151,6 +152,7 @@ module perm_check_tb;
     );
         begin
             fc = t_fc;
+            #1;
 
             if ((decode_is_user !== exp_is_user) ||
                 (decode_is_super !== exp_is_super) ||
@@ -237,6 +239,7 @@ module perm_check_tb;
                         s_perm = spv[2:0];
                         for (int tt = 0; tt < 2; tt++) begin
                             tt_bypass = tt[0];
+                            #1;
 
                             if (allow !== r_allow || fault !== r_fault) begin
                                 $error("Mismatch: U=%0d RWX=%b%b%b u_perm=%b s_perm=%b TT=%0d | DUT allow=%0b fault=%05b, REF allow=%0b fault=%05b",

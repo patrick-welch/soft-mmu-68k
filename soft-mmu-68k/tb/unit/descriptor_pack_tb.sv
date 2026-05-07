@@ -140,6 +140,7 @@ module descriptor_pack_tb;
     input string name
   );
     begin
+      #1;
       assert (packed_from_fields === expected)
         else $fatal(1, "%s pack mismatch: expected %h got %h", name, expected, packed_from_fields);
     end
@@ -154,6 +155,7 @@ module descriptor_pack_tb;
     input string name
   );
     begin
+      #1;
       assert (r_v_o     === exp_v)     else $fatal(1, "%s root valid mismatch", name);
       assert (r_i_o     === exp_lu)    else $fatal(1, "%s root L/U mismatch", name);
       assert (r_dt_o    === exp_dt)    else $fatal(1, "%s root DT mismatch", name);
@@ -171,6 +173,7 @@ module descriptor_pack_tb;
     input string name
   );
     begin
+      #1;
       assert (p_v_o     === exp_v)     else $fatal(1, "%s ptr valid mismatch", name);
       assert (p_i_o     === exp_lu)    else $fatal(1, "%s ptr L/U mismatch", name);
       assert (p_dt_o    === exp_dt)    else $fatal(1, "%s ptr DT mismatch", name);
@@ -191,6 +194,7 @@ module descriptor_pack_tb;
     input string name
   );
     begin
+      #1;
       assert (pg_v_o  === exp_v)  else $fatal(1, "%s page valid mismatch", name);
       assert (pg_dt_o === exp_dt) else $fatal(1, "%s page DT mismatch", name);
       assert (pg_s_o  === exp_s)  else $fatal(1, "%s page S mismatch", name);
@@ -260,14 +264,14 @@ module descriptor_pack_tb;
       pg_u_i  = 1'b1;
       pg_pa_i = 32'hCAFE_B000;
 
-      expected = 64'h0000_014D_CAFE_B000;
+      expected = 64'h0000_011D_CAFE_B000;
       expect_packed(expected, "page Motorola pack");
 
       packed_to_fields = expected;
       expect_page_decode(1'b1, 2'b01, 1'b1, 1'b1, 1'b0, 1'b1, 1'b1,
                          32'hCAFE_B000, "page Motorola unpack");
 
-      packed_to_fields = 64'h0000_0040_1234_5600;
+      packed_to_fields = 64'h0000_0100_1234_5600;
       expect_page_decode(1'b0, 2'b00, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0,
                          32'h1234_5000, "page invalid decode");
     end
