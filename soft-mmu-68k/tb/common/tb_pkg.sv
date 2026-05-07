@@ -12,12 +12,12 @@
 
 package tb_pkg;
 
-  localparam int unsigned TB_CMD_WIDTH        = 3;
-  localparam int unsigned TB_RESP_FAULT_WIDTH = 3;
-  localparam int unsigned TB_STATUS_BITS_W    = 8;
-  localparam int unsigned TB_ADDR_WIDTH       = 32;
-  localparam int unsigned TB_FC_WIDTH         = 3;
-  localparam int unsigned TB_DESC_PFN_WIDTH   = 24;
+  localparam integer TB_CMD_WIDTH        = 3;
+  localparam integer TB_RESP_FAULT_WIDTH = 3;
+  localparam integer TB_STATUS_BITS_W    = 8;
+  localparam integer TB_ADDR_WIDTH       = 32;
+  localparam integer TB_FC_WIDTH         = 3;
+  localparam integer TB_DESC_PFN_WIDTH   = 24;
 
   typedef enum logic [TB_CMD_WIDTH-1:0] {
     TB_CMD_NOP         = 3'd0,

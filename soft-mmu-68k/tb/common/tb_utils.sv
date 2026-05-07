@@ -42,12 +42,15 @@
     int tb_wait_iter; \
     bit tb_wait_seen; \
     tb_wait_seen = 1'b0; \
-    for (tb_wait_iter = 0; tb_wait_iter < (LIMIT); tb_wait_iter = tb_wait_iter + 1) begin \
-      STEP_STMT; \
+    for (tb_wait_iter = 0; (tb_wait_iter < (LIMIT)) && (!tb_wait_seen); tb_wait_iter = tb_wait_iter + 1) begin \
       if ((COND) === 1'b1) begin \
         tb_wait_seen = 1'b1; \
-        break; \
+      end else begin \
+        STEP_STMT; \
       end \
+    end \
+    if (!tb_wait_seen && ((COND) === 1'b1)) begin \
+      tb_wait_seen = 1'b1; \
     end \
     if (!tb_wait_seen) begin \
       $fatal(1, "[TB_WAIT_UNTIL] %s timed out after %0d step(s)", WHAT, LIMIT); \
