@@ -170,6 +170,7 @@ module tlb_dm_tb;
     invalidate_va    = VA_B;
     invalidate_fc    = FC_B;
     #10;
+    #1;
     invalidate_match = 1'b0;
     invalidate_va    = {VA_WIDTH{1'b0}};
     invalidate_fc    = {FC_WIDTH{1'b0}};
