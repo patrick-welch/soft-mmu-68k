@@ -112,6 +112,11 @@ module tlb_dm_tb;
   localparam logic [FC_WIDTH-1:0] FC_B  = 3'b101;
   localparam logic [ATTR_WIDTH-1:0] ATTR_B = 4'b0101;
 
+  localparam logic [VA_WIDTH-1:0] VA_C  = 16'h1134; // Different direct-mapped index.
+  localparam logic [PA_WIDTH-1:0] PA_C  = 16'hEF34;
+  localparam logic [FC_WIDTH-1:0] FC_C  = 3'b011;
+  localparam logic [ATTR_WIDTH-1:0] ATTR_C = 4'b0011;
+
   initial begin
     clear_inputs();
     rst_n = 1'b1;
@@ -176,7 +181,7 @@ module tlb_dm_tb;
     invalidate_fc    = {FC_WIDTH{1'b0}};
     expect_lookup(1'b0, {PA_WIDTH{1'b0}}, {ATTR_WIDTH{1'b0}});
 
-    // Refill again, then whole-TLB invalidate clears the valid bits.
+    // Refill again, then non-matching targeted invalidates must not clear it.
     refill_valid = 1'b1;
     refill_va    = VA_A;
     refill_pa    = PA_A;
@@ -191,10 +196,59 @@ module tlb_dm_tb;
     lookup_va = VA_A;
     lookup_fc = FC_A;
     expect_lookup(1'b1, PA_A, ATTR_A);
+
+    lookup_valid = 1'b0;
+    expect_lookup(1'b0, {PA_WIDTH{1'b0}}, {ATTR_WIDTH{1'b0}});
+    lookup_valid = 1'b1;
+    expect_lookup(1'b1, PA_A, ATTR_A);
+
+    invalidate_match = 1'b1;
+    invalidate_va    = VA_A;
+    invalidate_fc    = 3'b001;
+    #10;
+    #1;
+    invalidate_match = 1'b0;
+    invalidate_va    = {VA_WIDTH{1'b0}};
+    invalidate_fc    = {FC_WIDTH{1'b0}};
+    expect_lookup(1'b1, PA_A, ATTR_A);
+
+    invalidate_match = 1'b1;
+    invalidate_va    = VA_B;
+    invalidate_fc    = FC_A;
+    #10;
+    #1;
+    invalidate_match = 1'b0;
+    invalidate_va    = {VA_WIDTH{1'b0}};
+    invalidate_fc    = {FC_WIDTH{1'b0}};
+    expect_lookup(1'b1, PA_A, ATTR_A);
+
+    // Whole-TLB invalidate clears multiple populated valid entries.
+    refill_valid = 1'b1;
+    refill_va    = VA_C;
+    refill_pa    = PA_C;
+    refill_fc    = FC_C;
+    refill_attr  = ATTR_C;
+    #10;
+    refill_valid = 1'b0;
+    refill_va    = {VA_WIDTH{1'b0}};
+    refill_pa    = {PA_WIDTH{1'b0}};
+    refill_fc    = {FC_WIDTH{1'b0}};
+    refill_attr  = {ATTR_WIDTH{1'b0}};
+    lookup_va = VA_C;
+    lookup_fc = FC_C;
+    expect_lookup(1'b1, PA_C, ATTR_C);
+    lookup_va = VA_A;
+    lookup_fc = FC_A;
+    expect_lookup(1'b1, PA_A, ATTR_A);
+
     invalidate_all = 1'b1;
     #10;
+    #1;
     invalidate_all = 1'b0;
     /* verilator lint_on STMTDLY */
+    expect_lookup(1'b0, {PA_WIDTH{1'b0}}, {ATTR_WIDTH{1'b0}});
+    lookup_va = VA_C;
+    lookup_fc = FC_C;
     expect_lookup(1'b0, {PA_WIDTH{1'b0}}, {ATTR_WIDTH{1'b0}});
 
     $display("[tlb_dm_tb] PASS");

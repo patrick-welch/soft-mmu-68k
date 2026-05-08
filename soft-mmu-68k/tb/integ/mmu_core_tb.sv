@@ -50,9 +50,11 @@ module mmu_core_tb;
   localparam logic [VA_WIDTH-1:0] VA_MISS  = 16'h2234;
   localparam logic [VA_WIDTH-1:0] VA_PERM  = 16'h3234;
   localparam logic [VA_WIDTH-1:0] VA_TT_FALLBACK = 16'h6234;
+  localparam logic [VA_WIDTH-1:0] VA_TT1 = 16'h7234;
   localparam logic [VA_WIDTH-1:0] VA_CPU_TT = 16'h5234;
   localparam logic [VA_WIDTH-1:0] VA_FAULT = 16'h4234;
   localparam logic [FC_WIDTH-1:0] FC_USER_DATA = 3'b001;
+  localparam logic [FC_WIDTH-1:0] FC_SUPER_DATA = 3'b101;
   localparam logic [FC_WIDTH-1:0] FC_CPU_SPACE = 3'b111;
   localparam logic [PA_WIDTH-1:0] TABLE_BASE = 16'h0200;
 
@@ -417,12 +419,38 @@ module mmu_core_tb;
     `TB_FATAL_IF_TRUE("no fault after refill hit", resp_fault)
     `TB_FATAL_IF_NOT_EQUAL("refill hit PA", 16'hB234, resp_pa)
 
+    command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("post-refill probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("post-refill probe reports translated hit", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("post-refill probe PA", 16'hB234, status_pa)
+    `TB_FATAL_IF_FALSE("post-refill probe sets translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("post-refill probe does not set TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_NOT_EQUAL("post-refill probe attrs", 5'b00011, status_bits[4:0])
+
+    command_issue(TB_CMD_FLUSH_MATCH, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("post-refill flush-match command", TB_CMD_FLUSH_MATCH, status_cmd)
+
+    command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("post-refill flushed probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_TRUE("probe misses after flushing refill", status_hit)
+    `TB_FATAL_IF_TRUE("flushed probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("flushed probe clears TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+
     // User access to a supervisor-only mapping must fault.
     cpu_request(VA_PERM, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
     `TB_FATAL_IF_FALSE("permission fault asserted", resp_fault)
     `TB_FATAL_IF_NOT_EQUAL("permission fault code", TB_RESP_FAULT_PERM, resp_fault_code)
     `TB_FATAL_IF_NOT_EQUAL("permission fault bits", 5'b01001, resp_perm_fault)
+
+    cpu_request(VA_PERM, FC_SUPER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("supervisor access to same page succeeds", resp_fault)
+    `TB_FATAL_IF_TRUE("supervisor access walks with distinct FC", resp_hit)
+    `TB_FATAL_IF_NOT_EQUAL("supervisor PA after permission fault", 16'hC334, resp_pa)
 
     // First-pass TT subset: user-data match bypasses translation and permission checks.
     reg_write(4'h3, make_ttr(8'h32, 8'h00, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1));
@@ -442,6 +470,28 @@ module mmu_core_tb;
     `TB_FATAL_IF_FALSE("TT probe sets TT class bit", status_bits[STATUS_BIT_TT_MATCH])
     `TB_FATAL_IF_TRUE("TT probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
 
+    reg_write(4'h4, make_ttr(8'h72, 8'h00, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1));
+    cpu_request(VA_PERM, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("TT0 still matches while TT1 is enabled", resp_hit)
+    `TB_FATAL_IF_TRUE("TT0 match still bypasses faults with TT1 enabled", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("TT0 identity PA with TT1 enabled", VA_PERM, resp_pa)
+
+    cpu_request(VA_TT1, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("TT1 match is not reported as translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("TT1 match bypasses faults", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("TT1 match returns identity-style PA", VA_TT1, resp_pa)
+    `TB_FATAL_IF_FALSE("TT1 match does not start a walk", !walk_mem_req_valid)
+
+    command_issue(TB_CMD_PROBE, VA_TT1, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("TT1 probe status command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("TT1 probe reports usable result", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("TT1 probe PA mirrors VA", VA_TT1, status_pa)
+    `TB_FATAL_IF_FALSE("TT1 probe sets TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_TRUE("TT1 probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+
     // A non-matching address still falls back to the normal translation path.
     cpu_request(VA_TT_FALLBACK, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
@@ -455,6 +505,7 @@ module mmu_core_tb;
     wait_for_status();
     `TB_FATAL_IF_NOT_EQUAL("CPU-space probe status command", TB_CMD_PROBE, status_cmd)
     `TB_FATAL_IF_TRUE("CPU-space probe does not use TT bypass", status_hit)
+    `TB_FATAL_IF_TRUE("CPU-space probe does not set TT class bit", status_bits[STATUS_BIT_TT_MATCH])
     cpu_request(VA_CPU_TT, FC_CPU_SPACE, 1'b1, 1'b0);
     wait_for_resp();
     `TB_FATAL_IF_TRUE("CPU-space translation first access is not a hit", resp_hit)
