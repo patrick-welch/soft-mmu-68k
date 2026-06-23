@@ -77,20 +77,46 @@ decode and permission logic.[^PRM-FC][^68030-UM-FC]
 - `CMD_FLUSH_ALL`, `CMD_FLUSH_MATCH`, and `CMD_PRELOAD` keep the current
   zero-status completion model.
 
-**Observed Basys 3 smoke-demo behavior**
-- With all switches low, the board shows the translated user-data smoke case:
-  translated access succeeds and the translated probe-status class bit is set.
-- With `SW15=1`, the board shows the TT-qualified identity-style case:
-  no fault, probe/status hit asserted, translated-status class clear, TT-status
-  class set.
-- With `SW8=1` and user mode selected, the board exercises the supervisor-only
-  translated page and shows a permission fault.
-- With `SW12=1` and `SW8=1`, the same translated page succeeds as a supervisor
-  access.
+**Observed P11 Basys 3 smoke-demo behavior**
+- Real-board smoke-test scope: this records repeatable `top_mmu_demo` behavior
+  on Basys 3 only. It is not full architectural/MMU validation.
+- Procedure: freshly program `top_mmu_demo`; set switches first; hold `BTNC`
+  reset; release `BTNC`; record LEDs. Each case below was run twice to check
+  repeatability.
+- Reset sanity while holding `BTNC`: `LED1=0 LED2=0 LED3=0 LED4=0 LED5=0`.
+- A, all switches zero:
+  `SW15=0 SW14=0 SW13=0 SW12=0 SW11=0 SW10=0 SW9=0 SW8=0 SW7:0=0`.
+  A1 and A2 matched:
+  `LED0=0 LED1=0 LED2=1 LED3=1 LED4=1 LED5=0 LED6=0 LED7=0 LED8=0`;
+  upper LEDs noted: `LED15`.
+  Interpretation: no-fault translated hit/probe behavior.
+- B, `SW15=1` only:
+  `SW15=1 SW14=0 SW13=0 SW12=0 SW11=0 SW10=0 SW9=0 SW8=0 SW7:0=0`.
+  B1 and B2 matched:
+  `LED0=0 LED1=0 LED2=0 LED3=1 LED4=0 LED5=1 LED6=0 LED7=0 LED8=0`.
+  Interpretation: TT-path behavior asserted, translated indicator deasserted,
+  no fault.
+- C, `SW8=1` only:
+  `SW15=0 SW14=0 SW13=0 SW12=0 SW11=0 SW10=0 SW9=0 SW8=1 SW7:0=0`.
+  C1 and C2 matched:
+  `LED0=0 LED1=1 LED2=1 LED3=1 LED4=1 LED5=0 LED6=1 LED7=0 LED8=0`;
+  upper LEDs noted: `LED9`, `LED15`.
+  Interpretation: translated hit with permission fault for user access to a
+  supervisor-only page.
+- D, `SW8=1` and `SW12=1`:
+  `SW15=0 SW14=0 SW13=0 SW12=1 SW11=0 SW10=0 SW9=0 SW8=1 SW7:0=0`.
+  D1 and D2 matched:
+  `LED0=0 LED1=0 LED2=1 LED3=1 LED4=1 LED5=0 LED6=0 LED7=0 LED8=0`;
+  upper LEDs noted: `LED9`, `LED15`.
+  Interpretation: same supervisor-only page succeeds when supervisor mode is
+  selected; permission fault clears.
 
-Those board observations are smoke-level confirmation of the current
-translated-vs-transparent split; they are not proof of full Motorola PMMU
-behavior.
+These P11 board observations show that reset behavior is observable, the
+front-panel switch mapping is live, the translated path is live,
+TT-vs-translated selection is live, and privilege-sensitive permission behavior
+is live. Under the reset-driven procedure above, the P11 Basys 3 smoke demo
+passes repeatable real-board smoke testing; this remains smoke-level evidence,
+not proof of full Motorola PMMU behavior.
 
 **What is still intentionally deferred**
 - Full Motorola TT register decoding beyond the narrow `TTx[31:24]`,
