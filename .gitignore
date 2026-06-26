@@ -20,3 +20,29 @@ verilated*
 
 # Simulation results
 smoke-results/
+
+# MATLAB autosaves / temp
+*.asv
+*.m~
+*.mat
+
+# MEX binaries
+*.mexw64
+*.mexa64
+*.mexmaci64
+
+# MATLAB / Simulink generated folders
+codegen/
+slprj/
+*.slxc
+
+# HDL Coder / generated experiment output
+hdlsrc/
+*_hdlsrc/
+*_ert_rtw/
+*_grt_rtw/
+
+# Local reports / scratch
+matlab/reports/
+scripts/matlab/reports/
+scratch/
