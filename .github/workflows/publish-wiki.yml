@@ -1,0 +1,64 @@
+name: Publish Wiki
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_dir:
+        description: "Directory containing repo-controlled Wiki Markdown"
+        required: false
+        default: "soft-mmu-68k/docs/wiki"
+
+permissions:
+  contents: write
+
+jobs:
+  publish-wiki:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Wiki source directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="${{ github.event.inputs.source_dir }}"
+          test -d "$SRC"
+          if grep -RInE '(:contentReference\[|oaicite:)' "$SRC"; then
+            echo "Forbidden AI citation artifact found in Wiki source." >&2
+            exit 1
+          fi
+
+      - name: Clone Wiki repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: Copy source pages into Wiki checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="${{ github.event.inputs.source_dir }}"
+          rsync -av --delete \
+            --exclude 'README.md' \
+            --include '*/' \
+            --include '*.md' \
+            --exclude '*' \
+            "$SRC/" wiki/
+
+      - name: Commit and push Wiki updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No Wiki changes to publish."
+            exit 0
+          fi
+          git add .
+          git commit -m "Publish Wiki from repo-controlled docs"
+          git push
