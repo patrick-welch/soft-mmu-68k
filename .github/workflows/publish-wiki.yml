@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           SRC="${{ github.event.inputs.source_dir }}"
-          rsync -av --delete \
+          rsync -av \
             --exclude 'README.md' \
             --include '*/' \
             --include '*.md' \
