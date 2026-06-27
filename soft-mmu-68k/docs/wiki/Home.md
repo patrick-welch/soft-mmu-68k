@@ -93,7 +93,7 @@ This Wiki follows a few strict rules:
 - Acronyms should be expanded on first use.
 - Pages should distinguish between implemented behavior, first-pass behavior, and deferred behavior.
 - When possible, a page should identify where a concept is implemented in the repo.
-- Public pages must not contain assistant-only citation artifacts such as `:contentReference[` or `oaicite:`.
+- Public pages must not contain assistant-only citation artifacts.
 - This Wiki should not claim full Motorola architectural compatibility where the repo itself does not support that claim.
 
 ## Recommended next page
