@@ -28,6 +28,8 @@ jobs:
           if grep -RInE '(:contentReference\[|oaicite:)' "$SRC"; then
             echo "Forbidden AI citation artifact found in Wiki source." >&2
             exit 1
+          else
+            echo "Wiki source artifact check passed."
           fi
 
       - name: Clone Wiki repository
