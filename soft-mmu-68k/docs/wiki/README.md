@@ -12,10 +12,7 @@ branches/PRs, then publish it to the Wiki with the manual workflow in
 
 - Treat this directory as the source of truth for pages mirrored into the Wiki.
 - Do not paste ChatGPT/OpenAI citation artifacts into these files.
-- Forbidden public-doc artifacts include strings such as:
-  - `:contentReference[`
-  - `oaicite:`
-  - raw assistant-only citation markers
+- Do not include assistant-only citation marker strings in public documentation.
 - Keep implementation claims tied to repo files, verified manual references, or
   explicit project-status notes.
 - Do not claim full Motorola PMMU compatibility unless the behavior is actually
