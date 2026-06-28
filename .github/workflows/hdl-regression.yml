@@ -29,18 +29,18 @@ jobs:
         run: |
           set -euo pipefail
           cd soft-mmu-68k
-          ./scripts/run_iverilog_unit.sh
+          bash ./scripts/run_iverilog_unit.sh
 
       - name: Run Icarus integration benches
         shell: bash
         run: |
           set -euo pipefail
           cd soft-mmu-68k
-          ./scripts/run_iverilog_integ.sh
+          bash ./scripts/run_iverilog_integ.sh
 
       - name: Run Verilator lint
         shell: bash
         run: |
           set -euo pipefail
           cd soft-mmu-68k
-          ./scripts/run_verilator_lint.sh
+          bash ./scripts/run_verilator_lint.sh
