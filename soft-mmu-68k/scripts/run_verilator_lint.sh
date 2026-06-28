@@ -4,7 +4,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 print_cmd() {
-  printf '+'
+  printf ' +'
   printf ' %q' "$@"
   printf '\n'
 }
@@ -15,7 +15,7 @@ run_lint() {
 
   echo "==> LINT: ${name}"
 
-  local lint_cmd=(verilator --lint-only -Wall -Wno-fatal -I. "$@")
+  local lint_cmd=(verilator --lint-only --no-timing -Wall -Wno-fatal -I. "$@")
   print_cmd "${lint_cmd[@]}"
   if ! "${lint_cmd[@]}"; then
     echo "FAIL: ${name}"
@@ -26,6 +26,7 @@ run_lint() {
   echo
 }
 
+echo "Note: --no-timing makes delay-based benches lintable without requiring timing simulation semantics."
 echo "Note: -Wno-fatal keeps current accepted warnings visible while preserving failure on errors."
 echo "Accepted warnings in this flow are pre-existing Verilator warnings from delay-based benches and the Basys 3 smoke top."
 echo
