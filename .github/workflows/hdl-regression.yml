@@ -1,0 +1,46 @@
+name: HDL Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  hdl-regression:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install HDL tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y iverilog verilator
+
+      - name: Run Icarus unit benches
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd soft-mmu-68k
+          bash ./scripts/run_iverilog_unit.sh
+
+      - name: Run Icarus integration benches
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd soft-mmu-68k
+          bash ./scripts/run_iverilog_integ.sh
+
+      - name: Run Verilator lint
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd soft-mmu-68k
+          bash ./scripts/run_verilator_lint.sh
