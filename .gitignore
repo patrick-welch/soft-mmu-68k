@@ -3,8 +3,9 @@ MMU-Project-Structure-Create.ps1
 Project-Structure.txt
 *.fuse_hidden*
 
-# VS Code workspace and settings
-soft-mmu-68k.code-workspace
+# VS Code workspace/profile files and settings
+*.code-workspace*
+*.code-profile*
 soft-mmu-68k/.vscode/settings.json
 soft-mmu-68k/.vscode/tasks.json
 
