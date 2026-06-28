@@ -93,8 +93,6 @@ Not every one of those values is used equally in the current first-pass datapath
 - **Translation Control (TC)** contributes table-entry configuration
 - **Transparent Translation 0 (TT0)** and **Transparent Translation 1 (TT1)** feed the transparent-translation qualifier
 
-
-
 ## Step 2: Function Code decode
 
 The request’s **Function Code (FC)** is decoded by `mmu_decode`.
@@ -124,9 +122,9 @@ If a transparent-translation match occurs:
 - the request bypasses page-table translation
 - the physical address becomes an identity-style resize of the logical address
 - the translated-hit output is **not** asserted, because the repo reserves that signal for translated translation-cache-backed hits
-- the request can still be denied if malformed, because transparent translation does not legalize a bad request encoding
+- the bypass path into `perm_check` wins, producing `allow=1` and `fault=0`
 
-The design docs explicitly state that Central Processing Unit (CPU) / special-space accesses do not transparently match in the current subset.
+The design docs explicitly state that Central Processing Unit (CPU) / special-space accesses do not transparently match in the current subset. That `mmu_top` TT/TTR qualification rule is distinct from the lower-level `perm_check` bypass policy.
 
 ## Step 4: translation-cache lookup
 
@@ -203,6 +201,8 @@ It receives:
 - the table-entry span derived from **Translation Control (TC)**
 
 It then performs one abstract descriptor fetch.
+
+After D2, the default live walker boundary consumes the 64-bit long-format page descriptor subset aligned with `descriptor_pack`. Compact 32-bit page descriptors are no longer the default live walker boundary.
 
 The walker can complete in one of four broad ways:
 
@@ -319,6 +319,16 @@ The repo documentation says this proves that the current subset can:
 
 It also explicitly says this does **not** prove full Motorola architectural behavior, full legality handling, multi-level walking, or real processor execution.
 
+## MATLAB-backed golden-vector note
+
+MGV0 proves the first committed MATLAB-backed vector flow in this repo for `perm_check`:
+
+```text
+MATLAB reference model -> generated CSV -> SystemVerilog testbench -> HDL Regression Action
+```
+
+This is an additional verification layer for permission behavior. It does not replace directed RTL tests, integration benches, or future packet-specific architectural tests.
+
 ## Current limitations
 
 This page should be read with the repo’s current boundaries in mind:
@@ -328,7 +338,7 @@ This page should be read with the repo’s current boundaries in mind:
 - the walker is single-level only
 - the integration wrapper handles one outstanding translation request at a time
 - the current repo does not yet provide a complete Motorola architectural model
-- the long-format descriptor model is not yet propagated end-to-end through the live datapath
+- full root/pointer traversal and complete descriptor-tree behavior remain deferred
 
 Those limitations are part of the current translation flow and should remain visible in the documentation.
 
