@@ -17,7 +17,7 @@ The project implements a modular, synthesizable **Memory Management Unit (MMU)**
 - first-pass flush, probe, and preload control operations
 - Basys 3 smoke-demo bring-up
 
-The repository describes this as implemented through packet `P11`, with several behaviors still explicitly marked first-pass only. These include **Transparent Translation (TT0 / TT1)**, **MMU Status Register (MMUSR)** behavior, **Page Test (PTEST)** semantics, **Page Load (PLOAD)** semantics, **Page Flush (PFLUSH)** semantics, and the difference between Motorola-aligned descriptor packing and the still-compact live translation datapath. [[Glossary]] should be read alongside this page.
+The repository describes this as implemented through packet `P11`, with later documentation and implementation packets including D2, M1, and MGV0. Several behaviors remain explicitly first-pass only. These include **Transparent Translation (TT0 / TT1)**, hardware-updated **MMU Status Register (MMUSR)** behavior, **Page Test (PTEST)** semantics, **Page Load (PLOAD)** semantics, **Page Flush (PFLUSH)** semantics, and full Motorola descriptor-tree behavior. [[Glossary]] should be read alongside this page.
 
 ## High-level structure
 
@@ -44,7 +44,7 @@ The register block provides the control-and-status state used by the rest of the
 - **Transparent Translation 1 (TT1)**
 - **MMU Status Register (MMUSR)**
 
-The register block is intentionally simple and deterministic. It provides synchronous storage, a simple read/write interface, and reset defaults that leave translation disabled immediately after reset. The repo also states clearly that the current **MMU Status Register (MMUSR)** image is a first-pass software-visible model rather than a fully synthesized Motorola-compatible result generator. For details, see [[MMU-Registers]].
+The register block is intentionally simple and deterministic. It provides synchronous storage, a simple read/write interface, and reset defaults that leave translation disabled immediately after reset. The repo also states clearly that the current **MMU Status Register (MMUSR)** image is a first-pass software-visible model rather than a fully synthesized Motorola-compatible result generator. M1 added a repo-local status-model specification for future MMUSR/PTEST work. For details, see [[MMU-Registers]].
 
 ## 2. Access classification
 
@@ -73,7 +73,7 @@ The current transparent-translation subset uses the existing 32-bit register ima
 - user/supervisor matching bits
 - program/data matching bits
 
-If a transparent-translation match occurs, the current design bypasses page-table translation and returns an identity-style physical address by resizing the logical address onto the physical-address bus. In the current subset, transparent translation is also allowed to suppress page-derived permission denial for a valid access request. However, transparent translation does **not** legalize malformed requests, and it does **not** apply to Central Processing Unit (CPU) / special-space accesses. The repo explicitly calls this a narrow first-pass subset and warns against describing it as full Motorola transparent-translation support.
+If a transparent-translation match occurs, the current design bypasses page-table translation and returns an identity-style physical address by resizing the logical address onto the physical-address bus. `perm_check` treats `tt_bypass` as winning with `allow=1` and `fault=0`, while `mmu_top` still qualifies TT/TTR matches only for normal user/supervisor program/data accesses and explicitly excludes Central Processing Unit (CPU) / special-space accesses. The repo explicitly calls this a narrow first-pass subset and warns against describing it as full Motorola transparent-translation support.
 
 ## 4. Translation-cache lookup
 
@@ -95,6 +95,7 @@ The page-table walker is intentionally minimal in the current repo:
 - it is single-level only
 - it uses an abstract memory request/response interface
 - it reads one descriptor per miss
+- it consumes the 64-bit long-format page descriptor subset at the default boundary
 - it does not decide permissions itself
 - it forwards attribute information to later logic
 
@@ -118,16 +119,12 @@ This stage evaluates the access as one of three classes:
 
 It then checks the active privilege level against the user and supervisor permission banks. In the current design:
 
-- malformed requests are reported as **bad requests**
-- transparent-translation bypass applies only to otherwise valid requests
+- malformed requests are reported as **bad requests** when `tt_bypass` is not asserted
+- multi-hot requests may also report applicable permission diagnostics when `tt_bypass` is not asserted
+- `tt_bypass` wins inside `perm_check`, producing `allow=1` and `fault=0`
 - user denials that would have been allowed in supervisor mode are marked as **privilege-related**
 
-This stage exists twice in the integration wrapper:
-
-- once for translation-cache hits
-- once for walker-completed translations
-
-That split keeps the architecture simple and makes the first-pass flow easier to review. See [[Glossary]] and [[Function-Codes-and-Access-Classification]].
+MGV0 proved the first committed MATLAB-generated CSV vector flow through `tb/unit/perm_check_tb.sv` for this checker. That flow is verification collateral, not a replacement for RTL tests. See [[Glossary]] and [[Function-Codes-and-Access-Classification]].
 
 ## 7. Control operations and status reporting
 
@@ -189,9 +186,9 @@ That is the core current architecture.
 One of the most important architectural boundaries in the repo is the difference between:
 
 - the Motorola-aligned descriptor subset implemented by `descriptor_pack`
-- and the compact page-descriptor format still used by the live walker and smoke-demo datapath
+- the still-minimal live walker and smoke-demo datapath
 
-This distinction is not a bug in the documentation. It is intentional and explicitly documented. The wiki should preserve that distinction carefully so readers do not assume that the long-format descriptor model has already been propagated end to end through the implemented datapath. See [[Descriptor-Formats]].
+After D2, the default live walker / `mmu_top` boundary consumes the 64-bit long-format page descriptor subset. Compact 32-bit descriptors are no longer the default live walker boundary. This does not imply full root/pointer traversal, multi-level walking, or complete Motorola descriptor-tree behavior. See [[Descriptor-Formats]].
 
 ## Hardware-facing architecture: Basys 3 smoke demo
 
@@ -211,11 +208,11 @@ This makes it an excellent architectural teaching aid, but the repo docs are exp
 The current architecture should be understood with these limits in mind:
 
 - **Transparent Translation (TT0 / TT1)** is a narrow first-pass subset.
-- **MMU Status Register (MMUSR)** behavior is first-pass.
+- **MMU Status Register (MMUSR)** behavior is first-pass plus the repo-local M1 status model.
 - **Page Test (PTEST)**, **Page Load (PLOAD)**, and **Page Flush (PFLUSH)** behavior is first-pass.
 - multi-level page-table walking is deferred
 - full Motorola legality handling is deferred
-- full end-to-end long-format descriptor datapath migration is deferred
+- full Motorola descriptor-tree behavior is deferred
 - the Basys 3 hardware path is a smoke harness, not a full processor system
 
 Those limits are not weaknesses in the documentation. They are part of the architecture as currently implemented and should be preserved explicitly in the wiki.
