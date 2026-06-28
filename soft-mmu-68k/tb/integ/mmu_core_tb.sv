@@ -32,7 +32,7 @@ module mmu_core_tb;
   localparam int PA_WIDTH      = 16;
   localparam int PAGE_SHIFT    = 8;
   localparam int FC_WIDTH      = TB_FC_WIDTH;
-  localparam int DESCR_WIDTH   = 32;
+  localparam int DESCR_WIDTH   = 64;
   localparam int TLB_ENTRIES   = 4;
   localparam int ATTR_WIDTH    = 5;
   localparam int STATUS_WIDTH  = TB_STATUS_BITS_W;
@@ -45,7 +45,9 @@ module mmu_core_tb;
   localparam int STATUS_BIT_TT_MATCH = STATUS_WIDTH - 1;
   localparam int STATUS_BIT_TRANSLATED = STATUS_WIDTH - 2;
 
-  localparam logic [1:0] DESC_DT_PAGE = 2'b10;
+  localparam logic [1:0] DESC_DT_INVALID = 2'b00;
+  localparam logic [1:0] DESC_DT_PAGE = 2'b01;
+  localparam logic [1:0] DESC_DT_PTR  = 2'b10;
   localparam logic [VA_WIDTH-1:0] VA_HIT   = 16'h1234;
   localparam logic [VA_WIDTH-1:0] VA_MISS  = 16'h2234;
   localparam logic [VA_WIDTH-1:0] VA_PERM  = 16'h3234;
@@ -53,6 +55,8 @@ module mmu_core_tb;
   localparam logic [VA_WIDTH-1:0] VA_TT1 = 16'h7234;
   localparam logic [VA_WIDTH-1:0] VA_CPU_TT = 16'h5234;
   localparam logic [VA_WIDTH-1:0] VA_FAULT = 16'h4234;
+  localparam logic [VA_WIDTH-1:0] VA_INVALID = 16'h0234;
+  localparam logic [VA_WIDTH-1:0] VA_UNMAPPED = 16'h0334;
   localparam logic [FC_WIDTH-1:0] FC_USER_DATA = 3'b001;
   localparam logic [FC_WIDTH-1:0] FC_SUPER_DATA = 3'b101;
   localparam logic [FC_WIDTH-1:0] FC_CPU_SPACE = 3'b111;
@@ -180,7 +184,7 @@ module mmu_core_tb;
   assign walk_mem_resp_err   = walk_mem_req_valid && mem_err[mem_word_index];
 
   function automatic [DESCR_WIDTH-1:0] make_page_desc(
-    input logic                  valid_i,
+    input logic [1:0]            dt_i,
     input logic                  s_i,
     input logic                  wp_i,
     input logic                  ci_i,
@@ -191,14 +195,13 @@ module mmu_core_tb;
     reg [DESCR_WIDTH-1:0] tmp;
     begin
       tmp = '0;
-      tmp[DESCR_WIDTH-1 -: 2] = DESC_DT_PAGE;
-      tmp[DESCR_WIDTH-3]      = valid_i;
-      tmp[DESCR_WIDTH-4]      = s_i;
-      tmp[DESCR_WIDTH-5]      = wp_i;
-      tmp[DESCR_WIDTH-6]      = ci_i;
-      tmp[DESCR_WIDTH-7]      = m_i;
-      tmp[DESCR_WIDTH-8]      = u_i;
-      tmp[DESCR_WIDTH-9 -: PFN_WIDTH] = pfn_i;
+      tmp[40]        = s_i;
+      tmp[38]        = ci_i;
+      tmp[36]        = m_i;
+      tmp[35]        = u_i;
+      tmp[34]        = wp_i;
+      tmp[33:32]     = dt_i;
+      tmp[PAGE_SHIFT +: PFN_WIDTH] = pfn_i;
       make_page_desc = tmp;
     end
   endfunction
@@ -357,12 +360,14 @@ module mmu_core_tb;
     clear_memory();
     tb_release_reset(rst_n);
 
-    mem_desc[VA_HIT[VA_WIDTH-1:PAGE_SHIFT]]  = make_page_desc(1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA1);
-    mem_desc[VA_MISS[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 8'hB2);
-    mem_desc[VA_PERM[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 8'hC3);
-    mem_desc[VA_TT_FALLBACK[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hE6);
-    mem_desc[VA_CPU_TT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'hF5);
-    mem_desc[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'hD4);
+    mem_desc[VA_HIT[VA_WIDTH-1:PAGE_SHIFT]]  = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA1);
+    mem_desc[VA_MISS[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 8'hB2);
+    mem_desc[VA_PERM[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b1, 1'b0, 1'b0, 1'b0, 1'b0, 8'hC3);
+    mem_desc[VA_TT_FALLBACK[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b1, 1'b0, 1'b1, 8'hE6);
+    mem_desc[VA_CPU_TT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'hF5);
+    mem_desc[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_INVALID, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'hD4);
+    mem_desc[VA_INVALID[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_INVALID, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h02);
+    mem_desc[VA_UNMAPPED[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PTR, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h03);
     mem_err[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = 1'b1;
 
     /* verilator lint_off STMTDLY */
@@ -512,7 +517,19 @@ module mmu_core_tb;
     `TB_FATAL_IF_TRUE("CPU-space request still translates", resp_fault)
     `TB_FATAL_IF_NOT_EQUAL("CPU-space request uses translated PA", 16'hF534, resp_pa)
 
-    // Walker-side descriptor bus fault must report as a walker fault.
+    // Walker-side invalid, non-page, and bus faults must map to CPU response faults.
+    cpu_request(VA_INVALID, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_FALSE("walker invalid fault asserted", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("walker invalid fault code", TB_RESP_FAULT_INVALID, resp_fault_code)
+    `TB_FATAL_IF_TRUE("walker invalid fault does not report hit", resp_hit)
+
+    cpu_request(VA_UNMAPPED, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_FALSE("walker unmapped fault asserted", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("walker unmapped fault code", TB_RESP_FAULT_UNMAPPED, resp_fault_code)
+    `TB_FATAL_IF_TRUE("walker unmapped fault does not report hit", resp_hit)
+
     cpu_request(VA_FAULT, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
     `TB_FATAL_IF_FALSE("walker fault asserted", resp_fault)

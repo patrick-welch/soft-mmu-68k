@@ -6,7 +6,7 @@ module pt_walker_tb;
   localparam int VA_WIDTH    = 16;
   localparam int PA_WIDTH    = 16;
   localparam int PAGE_SHIFT  = 8;
-  localparam int DESCR_WIDTH = 32;
+  localparam int DESCR_WIDTH = 64;
   localparam int FC_WIDTH    = 3;
   localparam int ATTR_WIDTH  = 5;
   localparam int VPN_WIDTH   = VA_WIDTH - PAGE_SHIFT;
@@ -14,8 +14,9 @@ module pt_walker_tb;
   localparam int DESCR_BYTES = DESCR_WIDTH / 8;
   localparam int DESCR_BYTE_SHIFT = $clog2(DESCR_BYTES);
 
-  localparam logic [1:0] DESC_DT_PAGE = 2'b10;
-  localparam logic [1:0] DESC_DT_PTR  = 2'b01;
+  localparam logic [1:0] DESC_DT_INVALID = 2'b00;
+  localparam logic [1:0] DESC_DT_PAGE = 2'b01;
+  localparam logic [1:0] DESC_DT_PTR  = 2'b10;
   localparam logic [1:0] DESC_DT_ROOT = 2'b11;
   localparam logic [1:0] FAULT_NONE   = 2'b00;
   localparam logic [1:0] FAULT_INVALID= 2'b01;
@@ -99,7 +100,6 @@ module pt_walker_tb;
   assign mem_resp_err   = mem_req_valid && mem_err[mem_word_index];
 
   function automatic [DESCR_WIDTH-1:0] make_page_desc(
-    input logic                        valid_i,
     input logic [1:0]                  dt_i,
     input logic                        s_i,
     input logic                        wp_i,
@@ -111,14 +111,13 @@ module pt_walker_tb;
     reg [DESCR_WIDTH-1:0] tmp;
     begin
       tmp = '0;
-      tmp[DESCR_WIDTH-1 -: 2] = dt_i;
-      tmp[DESCR_WIDTH-3]      = valid_i;
-      tmp[DESCR_WIDTH-4]      = s_i;
-      tmp[DESCR_WIDTH-5]      = wp_i;
-      tmp[DESCR_WIDTH-6]      = ci_i;
-      tmp[DESCR_WIDTH-7]      = m_i;
-      tmp[DESCR_WIDTH-8]      = u_i;
-      tmp[DESCR_WIDTH-9 -: PFN_WIDTH] = pfn_i;
+      tmp[40]        = s_i;
+      tmp[38]        = ci_i;
+      tmp[36]        = m_i;
+      tmp[35]        = u_i;
+      tmp[34]        = wp_i;
+      tmp[33:32]     = dt_i;
+      tmp[PAGE_SHIFT +: PFN_WIDTH] = pfn_i;
       make_page_desc = tmp;
     end
   endfunction
@@ -169,6 +168,10 @@ module pt_walker_tb;
       assert(busy === 1'b0) else $fatal(1, "walker must be idle when success completes");
       assert(mem_req_offset_aligned === 1'b1) else $fatal(1, "descriptor request must be aligned");
       assert(mem_req_offset_upper_zero === 1'b1) else $fatal(1, "descriptor request index overflowed table space");
+      assert(mem_req_addr === (table_base + ({{(PA_WIDTH-VPN_WIDTH){1'b0}}, exp_va[VA_WIDTH-1:PAGE_SHIFT]} << DESCR_BYTE_SHIFT)))
+        else $fatal(1, "descriptor request stride mismatch exp=%h got=%h",
+                    (table_base + ({{(PA_WIDTH-VPN_WIDTH){1'b0}}, exp_va[VA_WIDTH-1:PAGE_SHIFT]} << DESCR_BYTE_SHIFT)),
+                    mem_req_addr);
       assert(refill_va === exp_va) else $fatal(1, "refill_va mismatch exp=%h got=%h", exp_va, refill_va);
       assert(walk_ppn === exp_ppn) else $fatal(1, "walk_ppn mismatch exp=%h got=%h", exp_ppn, walk_ppn);
       assert(walk_pa_base === {exp_ppn, {PAGE_SHIFT{1'b0}}})
@@ -205,7 +208,7 @@ module pt_walker_tb;
     #10;
     /* verilator lint_on STMTDLY */
 
-    mem_desc[8'h12] = make_page_desc(1'b1, DESC_DT_PAGE, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA5);
+    mem_desc[8'h12] = make_page_desc(DESC_DT_PAGE, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1, 8'hA5);
     drive_walk(16'h1234, 8'h40);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -215,7 +218,7 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_success(16'h1234, 8'hA5, 5'b10101);
 
-    mem_desc[8'h00] = make_page_desc(1'b1, DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 8'h80);
+    mem_desc[8'h00] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 8'h80);
     drive_walk(16'h0000, 8'h01);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -226,7 +229,7 @@ module pt_walker_tb;
     expect_success(16'h0000, 8'h80, 5'b00010);
     assert(mem_word_index === 8'h00) else $fatal(1, "lowest valid VA must read descriptor index 0");
 
-    mem_desc[8'h3F] = make_page_desc(1'b1, DESC_DT_PAGE, 1'b0, 1'b1, 1'b0, 1'b0, 1'b1, 8'h8F);
+    mem_desc[8'h3F] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b1, 1'b0, 1'b0, 1'b1, 8'h8F);
     drive_walk(16'h3FFF, 8'h40);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -237,7 +240,7 @@ module pt_walker_tb;
     expect_success(16'h3FFF, 8'h8F, 5'b01001);
     assert(mem_word_index === 8'h3F) else $fatal(1, "highest valid VA must read last in-range descriptor index");
 
-    mem_desc[8'h22] = make_page_desc(1'b0, DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h00);
+    mem_desc[8'h22] = make_page_desc(DESC_DT_INVALID, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h22);
     drive_walk(16'h2234, 8'h40);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -247,7 +250,7 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_fault(FAULT_INVALID);
 
-    mem_desc[8'h32] = make_page_desc(1'b1, DESC_DT_PTR, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h55);
+    mem_desc[8'h32] = make_page_desc(DESC_DT_PTR, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h55);
     drive_walk(16'h3234, 8'h40);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -257,7 +260,7 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_fault(FAULT_UNMAPPED);
 
-    mem_desc[8'h3A] = make_page_desc(1'b1, DESC_DT_ROOT, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h5A);
+    mem_desc[8'h3A] = make_page_desc(DESC_DT_ROOT, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h5A);
     drive_walk(16'h3A34, 8'h40);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
@@ -267,7 +270,7 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_fault(FAULT_UNMAPPED);
 
-    mem_desc[8'h42] = make_page_desc(1'b1, DESC_DT_PAGE, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h42);
+    mem_desc[8'h42] = make_page_desc(DESC_DT_INVALID, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h42);
     mem_err[8'h42] = 1'b1;
     drive_walk(16'h4234, 8'h80);
     start = 1'b1;
@@ -278,7 +281,7 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_fault(FAULT_BUS);
 
-    mem_desc[8'h52] = make_page_desc(1'b1, DESC_DT_PAGE, 1'b1, 1'b0, 1'b0, 1'b1, 1'b1, 8'h9A);
+    mem_desc[8'h52] = make_page_desc(DESC_DT_PAGE, 1'b1, 1'b0, 1'b0, 1'b1, 1'b1, 8'h9A);
     drive_walk(16'h5234, 8'h80);
     start = 1'b1;
     /* verilator lint_off STMTDLY */
