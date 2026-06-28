@@ -7,7 +7,7 @@
 //   - is_user: 1 if access is in user mode (from mmu_decode)
 //   - u_perm: {UX, UW, UR}   user  permissions (1=allowed)
 //   - s_perm: {SX, SW, SR}   super permissions (1=allowed)
-//   - tt_bypass: transparent-translation permission bypass for a valid request
+//   - tt_bypass: transparent-translation permission bypass
 //
 // Outputs:
 //   - allow: 1 if access permitted
@@ -19,10 +19,10 @@
 //            [4] bad_req (multiple or zero req_* set)
 //
 // Semantics:
-//   - Illegal request encodings dominate: zero-hot or multi-hot requests are
-//     denied with only bad_req asserted.
-//   - tt_bypass only suppresses permission denial for a valid single request; it
-//     does not legalize a malformed request encoding.
+//   - tt_bypass wins for this checker: bypassed requests are allowed with no
+//     diagnostic fault bits.
+//   - Without tt_bypass, illegal request encodings are denied with bad_req
+//     asserted; multi-hot requests may also report applicable permission faults.
 //   - privilege_related reports a user-mode denial where the supervisor bank
 //     would allow the same access class.
 
@@ -65,25 +65,25 @@ module perm_check
     wire allow_x = req_x & ux;
     wire perm_allow = allow_r | allow_w | allow_x;
 
-    // Fault bits for a valid request before the optional TT permission bypass.
-    wire deny_r = req_valid & req_r & ~ur;
-    wire deny_w = req_valid & req_w & ~uw;
-    wire deny_x = req_valid & req_x & ~ux;
+    // Fault bits before the optional TT permission bypass.
+    wire deny_r = req_r & ~ur;
+    wire deny_w = req_w & ~uw;
+    wire deny_x = req_x & ~ux;
 
-    wire no_read = deny_r & ~tt_bypass;
-    wire wr_prot = deny_w & ~tt_bypass;
-    wire no_exec = deny_x & ~tt_bypass;
+    wire no_read = deny_r;
+    wire wr_prot = deny_w;
+    wire no_exec = deny_x;
 
     // "Privilege related": user denied while supervisor would be allowed for same op.
     wire priv_rel_r = is_user & deny_r & s_perm[0];
     wire priv_rel_w = is_user & deny_w & s_perm[1];
     wire priv_rel_x = is_user & deny_x & s_perm[2];
-    wire priv_rel   = (priv_rel_r | priv_rel_w | priv_rel_x) & ~tt_bypass;
+    wire priv_rel   = priv_rel_r | priv_rel_w | priv_rel_x;
 
-    assign allow = bad_req ? 1'b0
-                           : (tt_bypass ? 1'b1 : perm_allow);
+    assign allow = tt_bypass ? 1'b1
+                             : (req_valid & perm_allow);
 
-    assign fault = bad_req ? 5'b10000
-                           : { 1'b0, priv_rel, no_exec, wr_prot, no_read };
+    assign fault = tt_bypass ? 5'b00000
+                             : { bad_req, priv_rel, no_exec, wr_prot, no_read };
 
 endmodule
