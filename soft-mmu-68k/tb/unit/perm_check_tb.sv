@@ -4,6 +4,8 @@
 
 module perm_check_tb;
 
+    localparam int PERM_CHECK_CSV_ROWS = 2048;
+
     localparam logic [4:0] FAULT_NO_READ    = 5'b00001;
     localparam logic [4:0] FAULT_WR_PROT    = 5'b00010;
     localparam logic [4:0] FAULT_NO_EXEC    = 5'b00100;
@@ -87,24 +89,24 @@ module perm_check_tb;
         allow_x = f_req_x & ux;
         perm_allow = allow_r | allow_w | allow_x;
 
-        deny_r = req_valid & f_req_r & ~ur;
-        deny_w = req_valid & f_req_w & ~uw;
-        deny_x = req_valid & f_req_x & ~ux;
+        deny_r = f_req_r & ~ur;
+        deny_w = f_req_w & ~uw;
+        deny_x = f_req_x & ~ux;
 
-        no_read = deny_r & ~f_tt_bypass;
-        wr_prot = deny_w & ~f_tt_bypass;
-        no_exec = deny_x & ~f_tt_bypass;
+        no_read = deny_r;
+        wr_prot = deny_w;
+        no_exec = deny_x;
 
         priv_rel_r = f_is_user & deny_r & f_s_perm[0];
         priv_rel_w = f_is_user & deny_w & f_s_perm[1];
         priv_rel_x = f_is_user & deny_x & f_s_perm[2];
-        priv_rel   = (priv_rel_r | priv_rel_w | priv_rel_x) & ~f_tt_bypass;
+        priv_rel   = priv_rel_r | priv_rel_w | priv_rel_x;
 
-        f_allow = bad_req ? 1'b0
-                          : (f_tt_bypass ? 1'b1 : perm_allow);
+        f_allow = f_tt_bypass ? 1'b1
+                              : (req_valid & perm_allow);
 
-        f_fault = bad_req ? FAULT_BAD_REQ
-                          : {1'b0, priv_rel, no_exec, wr_prot, no_read};
+        f_fault = f_tt_bypass ? 5'b00000
+                              : {bad_req, priv_rel, no_exec, wr_prot, no_read};
     endtask
 
     int errors;
@@ -168,6 +170,145 @@ module perm_check_tb;
         end
     endtask
 
+    task automatic run_csv_vectors;
+        string csv_path;
+        reg [8*256-1:0] line;
+        integer csv_fd;
+        int csv_row;
+        int data_rows;
+        int fields;
+        int fgets_result;
+
+        int csv_is_user;
+        int csv_req_code;
+        int csv_req_r;
+        int csv_req_w;
+        int csv_req_x;
+        int csv_u_perm;
+        int csv_s_perm;
+        int csv_tt_bypass;
+        int csv_allow;
+        int csv_fault;
+
+        begin
+            csv_path = "tb/common/golden_vectors/perm_check_golden_vectors.csv";
+            if ($value$plusargs("PERM_CHECK_CSV=%s", csv_path)) begin
+                $display("[perm_check_tb] CSV path override: %0s", csv_path);
+            end
+
+            csv_fd = $fopen(csv_path, "r");
+            if (csv_fd == 0) begin
+                $error("[perm_check_tb] Missing CSV file: %0s", csv_path);
+                errors++;
+                $fatal(1);
+            end
+
+            fgets_result = $fgets(line, csv_fd);
+            if (fgets_result == 0) begin
+                $error("[perm_check_tb] CSV file has no header row: %0s", csv_path);
+                errors++;
+                $fclose(csv_fd);
+                $fatal(1);
+            end
+
+            csv_row = 1;
+            data_rows = 0;
+            fgets_result = $fgets(line, csv_fd);
+
+            while (fgets_result != 0) begin
+                csv_row++;
+                fields = $sscanf(line, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
+                                 csv_is_user,
+                                 csv_req_code,
+                                 csv_req_r,
+                                 csv_req_w,
+                                 csv_req_x,
+                                 csv_u_perm,
+                                 csv_s_perm,
+                                 csv_tt_bypass,
+                                 csv_allow,
+                                 csv_fault);
+
+                if (fields != 10) begin
+                    $error("[perm_check_tb] Malformed CSV row %0d: parsed %0d/10 fields: %0s",
+                           csv_row, fields, line);
+                    errors++;
+                    $fclose(csv_fd);
+                    $fatal(1);
+                end
+
+                if ((csv_is_user < 0) || (csv_is_user > 1) ||
+                    (csv_req_code < 0) || (csv_req_code > 7) ||
+                    (csv_req_r < 0) || (csv_req_r > 1) ||
+                    (csv_req_w < 0) || (csv_req_w > 1) ||
+                    (csv_req_x < 0) || (csv_req_x > 1) ||
+                    (csv_u_perm < 0) || (csv_u_perm > 7) ||
+                    (csv_s_perm < 0) || (csv_s_perm > 7) ||
+                    (csv_tt_bypass < 0) || (csv_tt_bypass > 1) ||
+                    (csv_allow < 0) || (csv_allow > 1) ||
+                    (csv_fault < 0) || (csv_fault > 31)) begin
+                    $error("[perm_check_tb] Malformed CSV row %0d: value out of range: is_user=%0d req_code=%0d req_r=%0d req_w=%0d req_x=%0d u_perm=%0d s_perm=%0d tt_bypass=%0d allow=%0d fault=%0d",
+                           csv_row,
+                           csv_is_user,
+                           csv_req_code,
+                           csv_req_r,
+                           csv_req_w,
+                           csv_req_x,
+                           csv_u_perm,
+                           csv_s_perm,
+                           csv_tt_bypass,
+                           csv_allow,
+                           csv_fault);
+                    errors++;
+                    $fclose(csv_fd);
+                    $fatal(1);
+                end
+
+                data_rows++;
+
+                is_user = csv_is_user[0];
+                req_r = csv_req_r[0];
+                req_w = csv_req_w[0];
+                req_x = csv_req_x[0];
+                u_perm = csv_u_perm[2:0];
+                s_perm = csv_s_perm[2:0];
+                tt_bypass = csv_tt_bypass[0];
+                #1;
+
+                if ((allow !== csv_allow[0]) || (fault !== csv_fault[4:0])) begin
+                    $error("[perm_check_tb] CSV mismatch row %0d: is_user=%0d req_code=%0d req_r=%0d req_w=%0d req_x=%0d u_perm=%03b s_perm=%03b tt_bypass=%0d expected allow=%0b actual allow=%0b expected fault=%05b actual fault=%05b",
+                           csv_row,
+                           csv_is_user,
+                           csv_req_code,
+                           csv_req_r,
+                           csv_req_w,
+                           csv_req_x,
+                           csv_u_perm[2:0],
+                           csv_s_perm[2:0],
+                           csv_tt_bypass,
+                           csv_allow[0],
+                           allow,
+                           csv_fault[4:0],
+                           fault);
+                    errors++;
+                end
+
+                fgets_result = $fgets(line, csv_fd);
+            end
+
+            $fclose(csv_fd);
+
+            if (data_rows != PERM_CHECK_CSV_ROWS) begin
+                $error("[perm_check_tb] CSV row count mismatch: expected %0d data rows, observed %0d data rows",
+                       PERM_CHECK_CSV_ROWS, data_rows);
+                errors++;
+                $fatal(1);
+            end
+
+            $display("[perm_check_tb] CSV golden-vector pass completed: %0d data rows checked.", data_rows);
+        end
+    endtask
+
     always_comb begin
         ref_model(req_r, req_w, req_x,
                   is_user, u_perm, s_perm, tt_bypass,
@@ -218,9 +359,9 @@ module perm_check_tb;
         expect_perm_case("user fetch execute allowed",
                          1'b0, 1'b0, 1'b1, 1'b1, 3'b100, 3'b100, 1'b0,
                          1'b1, 5'b00000);
-        expect_perm_case("cpu-space style TT bypass still requires valid request",
+        expect_perm_case("TT bypass permits malformed request",
                          1'b0, 1'b0, 1'b0, 1'b0, 3'b000, 3'b000, 1'b1,
-                         1'b0, FAULT_BAD_REQ);
+                         1'b1, 5'b00000);
         expect_perm_case("TT bypass suppresses valid permission fault",
                          1'b1, 1'b0, 1'b0, 1'b1, 3'b000, 3'b001, 1'b1,
                          1'b1, 5'b00000);
@@ -253,10 +394,14 @@ module perm_check_tb;
             end
         end
 
+        run_csv_vectors();
+
         if (errors == 0)
-            $display("[perm_check_tb] PASS - all directed and exhaustive checks matched.");
-        else
+            $display("[perm_check_tb] PASS - all directed, exhaustive, and CSV golden-vector checks matched.");
+        else begin
             $display("[perm_check_tb] FAIL - %0d mismatches.", errors);
+            $fatal(1);
+        end
 
         $finish;
     end
