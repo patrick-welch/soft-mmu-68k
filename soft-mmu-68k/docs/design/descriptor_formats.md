@@ -1,11 +1,13 @@
 # Descriptor Formats (68851/030 lineage)
 
 **Scope**
-- `descriptor_pack` now defaults to a Motorola-aligned 64-bit long-format
-  subset for root, pointer, and page descriptors.
-- This document describes `descriptor_pack` only.
-- It does not claim that the full translation datapath has already migrated to
-  Motorola long-format descriptors end to end.
+- `descriptor_pack` defaults to a Motorola-aligned 64-bit long-format subset
+  for root, pointer, and page descriptors.
+- The live `pt_walker` / `mmu_top` descriptor bus now also defaults to 64 bits
+  and consumes the long-format page descriptor subset directly at the walker
+  boundary.
+- This does not add full Motorola PMMU compatibility, multi-level traversal, or
+  complete TC/CRP/SRP semantics.
 
 **Implemented long-format subset in `descriptor_pack`**
 - Root descriptor:
@@ -40,10 +42,17 @@
 
 **What this does and does not mean for the current repo**
 - `descriptor_pack` is Motorola-aligned for the subset above.
-- The current first-pass walker and Basys 3 smoke harness still use their own
-  compact 32-bit page-descriptor image for translated access/probe behavior.
-- That split is intentional in the current repo state: the descriptor-format
-  packet landed without claiming a full datapath migration.
+- The live walker consumes the page-descriptor subset fields in the same bit
+  positions: `S`, `CI`, `M`, `U`, `WP`, `DT`, and page base address.
+- The live walker accepts only the narrow page descriptor type currently used by
+  this repo (`DT == 2'b01`). `DT == 2'b00` is invalid, and other nonzero `DT`
+  values are valid non-page descriptors that report unmapped in the single-level
+  walker.
+- Compact 32-bit page descriptors are no longer accepted on the default live
+  walker/datapath boundary. Any source that still owns a compact image must
+  convert it before driving `pt_walker`.
+- The legacy valid ports on `descriptor_pack` remain compatibility shims around
+  `DT != 2'b00`; they are not standalone descriptor bits.
 
 **Why this is still a subset**
 - The module's external port list does not expose every Motorola long-format
@@ -76,13 +85,15 @@
   locations for `S`, `CI`, `M`, `U`, `WP`, `DT`, and page address.[^68851-UM-5.1.5.3][^68030-UM-9.5.1.7]
 
 **Known issues / bring-up notes**
-- Do not describe the current repo as using Motorola long-format descriptors
-  throughout the live translation datapath; that is not implemented yet.
-- The Basys 3 smoke demo proves the integrated first-pass datapath subset, but
-  that datapath is still using a compact responder/walker page format rather
-  than feeding `descriptor_pack` long-format descriptors through end to end.
-- If a later packet migrates the walker or TLB refill path, this document should
-  be updated together with the datapath docs so the two views stay aligned.
+- Do not describe the current repo as a full Motorola PMMU implementation. The
+  live path still performs one single-level descriptor read per miss and does
+  not implement full root/pointer traversal.
+- The Basys 3 smoke demo now uses a 64-bit long-format page-descriptor responder
+  for its tiny built-in descriptor source, but it remains smoke-level evidence
+  only.
+- Root and pointer descriptor packing remains covered by `descriptor_pack`; the
+  live walker does not consume root or pointer descriptors as traversal inputs in
+  this packet.
 
 **Known TODOs**
 - Add the remaining long-format fields if the surrounding MMU pipeline needs
