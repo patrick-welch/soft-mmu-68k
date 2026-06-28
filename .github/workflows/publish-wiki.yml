@@ -38,6 +38,35 @@ jobs:
           set -euo pipefail
           git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
 
+      - name: Remove explicitly stale Wiki pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="${{ github.event.inputs.source_dir }}"
+          DELETE_LIST="$SRC/.wiki-delete"
+          if [ ! -f "$DELETE_LIST" ]; then
+            echo "No explicit Wiki deletion list found."
+            exit 0
+          fi
+
+          while IFS= read -r page || [ -n "$page" ]; do
+            case "$page" in
+              ''|'#'*) continue ;;
+            esac
+            case "$page" in
+              */*|../*|/*)
+                echo "Refusing unsafe Wiki delete entry: $page" >&2
+                exit 1
+                ;;
+            esac
+            if [ -f "wiki/$page" ]; then
+              echo "Removing stale Wiki page: $page"
+              rm -f "wiki/$page"
+            else
+              echo "Stale Wiki page not present: $page"
+            fi
+          done < "$DELETE_LIST"
+
       - name: Copy source pages into Wiki checkout
         shell: bash
         run: |
@@ -45,6 +74,7 @@ jobs:
           SRC="${{ github.event.inputs.source_dir }}"
           rsync -av \
             --exclude 'README.md' \
+            --exclude '.*' \
             --include '*/' \
             --include '*.md' \
             --exclude '*' \
