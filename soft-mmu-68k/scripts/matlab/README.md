@@ -6,19 +6,32 @@ The files here are not synthesizable RTL. They are used to model expected behavi
 
 ## Directory layout
 
-- `models/` — MATLAB reference models for RTL behavior.
-- `generators/` — scripts/functions that generate golden-vector files.
-- `examples/` — runnable demos that exercise the models and generators.
+- `models/` - MATLAB reference models for RTL behavior.
+- `generators/` - scripts/functions that generate golden-vector files.
+- `examples/` - runnable demos that exercise the models and generators.
 
-## Current model: `perm_check`
+## Current proven flow: `perm_check`
 
-The current MATLAB collateral models `rtl/core/perm_check.v`.
+MGV0 established `perm_check` as the first proven MATLAB-backed vector flow in
+this repo:
+
+```text
+MATLAB reference model -> generated CSV -> SystemVerilog testbench -> HDL Regression Action
+```
+
+The MATLAB source generates the committed CSV vectors, and
+`tb/unit/perm_check_tb.sv` consumes that committed CSV as an additional
+verification layer. This does not replace RTL verification; it adds a
+cross-check against an independently written reference model for this one
+checker.
 
 Files:
 
 - `models/mmu_perm_check_reference.m`
 - `generators/generate_perm_check_vectors.m`
 - `examples/run_perm_check_demo.m`
+- `tb/common/golden_vectors/perm_check_golden_vectors.csv`
+- `tb/unit/perm_check_tb.sv`
 
 The reference model uses the same project permission-bit convention as the RTL:
 
@@ -54,7 +67,7 @@ That produces:
 2 * 8 * 8 * 8 * 2 = 2048 rows
 ```
 
-The demo writes the generated CSV to:
+The committed generated CSV lives at:
 
 ```text
 tb/common/golden_vectors/perm_check_golden_vectors.csv
@@ -77,5 +90,8 @@ When MATLAB-generated golden vectors are used by a testbench, the relevant desig
 - the MATLAB reference model used
 - the generator used
 - the output golden-vector path
+- the consuming SystemVerilog testbench
 - the behavioral scope being modeled
 - any first-pass project policy that differs from complete Motorola PMMU behavior
+
+Do not imply that MATLAB replaces RTL verification, directed HDL tests, integration benches, or HDL regression. Treat MATLAB-backed vectors as packet-specific reference collateral.
