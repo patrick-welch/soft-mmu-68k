@@ -14,7 +14,7 @@
 //   - One descriptor read per translation miss.
 //   - Permission faults are not handled here; attributes are forwarded to P3.
 //   - Faults in this packet:
-//       * invalid descriptor  : descriptor valid bit clear
+//       * invalid descriptor  : descriptor DT field is 2'b00
 //       * unmapped            : descriptor type not page, or VA outside table span
 //       * bus error           : abstract memory response indicates error
 // -----------------------------------------------------------------------------
@@ -23,21 +23,22 @@ module pt_walker #(
   parameter integer VA_WIDTH    = 24,
   parameter integer PA_WIDTH    = 24,
   parameter integer PAGE_SHIFT  = 12,
-  parameter integer DESCR_WIDTH = 32,
+  parameter integer DESCR_WIDTH = 64,
   parameter integer FC_WIDTH    = 3,
   parameter integer ATTR_WIDTH  = 5,
 
-  // Compact default page-descriptor layout used by this packet.
-  parameter integer DESC_DT_HI  = DESCR_WIDTH-1,
-  parameter integer DESC_DT_LO  = DESCR_WIDTH-2,
-  parameter integer DESC_V_BIT  = DESCR_WIDTH-3,
-  parameter integer DESC_S_BIT  = DESCR_WIDTH-4,
-  parameter integer DESC_WP_BIT = DESCR_WIDTH-5,
-  parameter integer DESC_CI_BIT = DESCR_WIDTH-6,
-  parameter integer DESC_M_BIT  = DESCR_WIDTH-7,
-  parameter integer DESC_U_BIT  = DESCR_WIDTH-8,
+  // Motorola-aligned long-format page-descriptor subset.
+  parameter integer DESC_DT_HI     = 33,
+  parameter integer DESC_DT_LO     = 32,
+  parameter integer DESC_S_BIT     = 40,
+  parameter integer DESC_WP_BIT    = 34,
+  parameter integer DESC_CI_BIT    = 38,
+  parameter integer DESC_M_BIT     = 36,
+  parameter integer DESC_U_BIT     = 35,
+  parameter integer DESC_PADDR_HI  = 31,
+  parameter integer DESC_PADDR_LO  = 8,
 
-  parameter [1:0] DESC_DT_PAGE  = 2'b10,
+  parameter [1:0] DESC_DT_PAGE  = 2'b01,
   parameter [1:0] FAULT_NONE    = 2'b00,
   parameter [1:0] FAULT_INVALID = 2'b01,
   parameter [1:0] FAULT_UNMAPPED= 2'b10,
@@ -73,8 +74,8 @@ module pt_walker #(
   localparam integer PFN_WIDTH         = (PA_WIDTH > PAGE_SHIFT) ? (PA_WIDTH - PAGE_SHIFT) : 1;
   localparam integer DESCR_BYTES       = DESCR_WIDTH / 8;
   localparam integer DESCR_BYTE_SHIFT  = $clog2(DESCR_BYTES);
-  localparam integer DESC_PFN_HI       = DESC_U_BIT - 1;
-  localparam integer DESC_PFN_LO       = DESC_PFN_HI - PFN_WIDTH + 1;
+  localparam integer DESC_PFN_HI       = PAGE_SHIFT + PFN_WIDTH - 1;
+  localparam integer DESC_PFN_LO       = PAGE_SHIFT;
 
   localparam [1:0] ST_IDLE = 2'd0;
   localparam [1:0] ST_WAIT = 2'd1;
@@ -84,9 +85,9 @@ module pt_walker #(
   reg                    mem_req_valid_q;
 
   wire [VPN_WIDTH-1:0] start_vpn = va_i[VA_WIDTH-1:PAGE_SHIFT];
-  wire [PFN_WIDTH-1:0] resp_pfn  = mem_resp_data_i[DESC_PFN_HI:DESC_PFN_LO];
-  wire                  resp_v    = mem_resp_data_i[DESC_V_BIT];
-  wire [1:0]            resp_dt   = mem_resp_data_i[DESC_DT_HI:DESC_DT_LO];
+  wire [PFN_WIDTH-1:0] resp_pfn     = mem_resp_data_i[DESC_PFN_HI:DESC_PFN_LO];
+  wire [1:0]            resp_dt      = mem_resp_data_i[DESC_DT_HI:DESC_DT_LO];
+  wire                  resp_invalid = (resp_dt == 2'b00);
 
   wire [ATTR_WIDTH-1:0] resp_attr = {
     mem_resp_data_i[DESC_S_BIT],
@@ -111,6 +112,9 @@ module pt_walker #(
     if (PA_WIDTH <= PAGE_SHIFT) begin
       $fatal(1, "pt_walker PA_WIDTH must exceed PAGE_SHIFT");
     end
+    if (DESCR_WIDTH < 64) begin
+      $fatal(1, "pt_walker DESCR_WIDTH must be >= 64 for long-format descriptors");
+    end
     if ((DESCR_WIDTH % 8) != 0) begin
       $fatal(1, "pt_walker DESCR_WIDTH must be byte-aligned");
     end
@@ -120,8 +124,17 @@ module pt_walker #(
     if (ATTR_WIDTH < 5) begin
       $fatal(1, "pt_walker ATTR_WIDTH must be >= 5");
     end
-    if (DESC_PFN_LO < 0) begin
-      $fatal(1, "pt_walker descriptor PFN field does not fit DESCR_WIDTH");
+    if (DESC_DT_HI >= DESCR_WIDTH || DESC_S_BIT >= DESCR_WIDTH ||
+        DESC_WP_BIT >= DESCR_WIDTH || DESC_CI_BIT >= DESCR_WIDTH ||
+        DESC_M_BIT >= DESCR_WIDTH || DESC_U_BIT >= DESCR_WIDTH ||
+        DESC_PFN_HI >= DESCR_WIDTH) begin
+      $fatal(1, "pt_walker long-format descriptor fields exceed DESCR_WIDTH");
+    end
+    if (DESC_DT_HI < DESC_DT_LO) begin
+      $fatal(1, "pt_walker descriptor DT field is malformed");
+    end
+    if (PAGE_SHIFT < DESC_PADDR_LO || DESC_PFN_HI > DESC_PADDR_HI) begin
+      $fatal(1, "pt_walker descriptor page-address field cannot represent PA/PAGE_SHIFT");
     end
   end
 
@@ -170,7 +183,7 @@ module pt_walker #(
             if (mem_resp_err_i) begin
               fault_valid_o <= 1'b1;
               fault_code_o  <= FAULT_BUS;
-            end else if (!resp_v) begin
+            end else if (resp_invalid) begin
               fault_valid_o <= 1'b1;
               fault_code_o  <= FAULT_INVALID;
             end else if (resp_dt != DESC_DT_PAGE) begin

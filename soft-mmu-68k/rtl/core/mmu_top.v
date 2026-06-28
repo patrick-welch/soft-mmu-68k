@@ -30,7 +30,7 @@ module mmu_top #(
   parameter integer PA_WIDTH      = 24,
   parameter integer PAGE_SHIFT    = 12,
   parameter integer FC_WIDTH      = 3,
-  parameter integer DESCR_WIDTH   = 32,
+  parameter integer DESCR_WIDTH   = 64,
   parameter integer TLB_ENTRIES   = 16,
   parameter integer ATTR_WIDTH    = 5,
   parameter integer STATUS_WIDTH  = 8,

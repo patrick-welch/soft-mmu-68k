@@ -25,6 +25,7 @@ module top_mmu_demo (
   localparam integer VA_WIDTH       = 24;
   localparam integer PA_WIDTH       = 24;
   localparam integer PAGE_SHIFT     = 12;
+  localparam integer DESCR_WIDTH    = 64;
   localparam integer FC_WIDTH       = 3;
   localparam integer STATUS_WIDTH   = 8;
   localparam integer CMD_WIDTH      = 3;
@@ -71,7 +72,10 @@ module top_mmu_demo (
   localparam [5:0] SEQ_PROBE        = 6'd10;
   localparam [5:0] SEQ_WAIT_PROBE   = 6'd11;
 
-  localparam [1:0] DESC_DT_PAGE     = 2'b10;
+  localparam integer DESCR_BYTES    = DESCR_WIDTH / 8;
+  localparam integer DESCR_SHIFT    = $clog2(DESCR_BYTES);
+
+  localparam [1:0] DESC_DT_PAGE     = 2'b01;
 
   wire rst_n = ~btnC;
 
@@ -97,7 +101,7 @@ module top_mmu_demo (
   reg                     req_fetch_q;
 
   reg                     walk_resp_valid_q;
-  reg  [31:0]             walk_resp_data_q;
+  reg  [DESCR_WIDTH-1:0]  walk_resp_data_q;
   reg                     walk_resp_err_q;
   reg                     walk_pending_q;
   reg  [PA_WIDTH-1:0]     walk_req_addr_q;
@@ -150,27 +154,28 @@ module top_mmu_demo (
   wire [STATUS_WIDTH-1:0] status_tt_mask = {{(STATUS_WIDTH-1){1'b0}}, 1'b1} << (STATUS_WIDTH-1);
   wire [STATUS_WIDTH-1:0] status_translated_mask = {{(STATUS_WIDTH-1){1'b0}}, 1'b1} << (STATUS_WIDTH-2);
 
-  wire [PA_WIDTH-1:0] walk_index_addr = (walk_req_addr_q - TABLE_BASE_ADDR) >> 2;
+  wire [PA_WIDTH-1:0] walk_index_addr = (walk_req_addr_q - TABLE_BASE_ADDR) >> DESCR_SHIFT;
   wire [PA_WIDTH-PAGE_SHIFT-1:0] walk_index_word =
     walk_index_addr[PA_WIDTH-PAGE_SHIFT-1:0];
 
-  function automatic [31:0] make_page_desc(
+  function automatic [DESCR_WIDTH-1:0] make_page_desc(
     input                   valid_i,
     input                   super_only_i,
     input                   write_protect_i,
     input [PA_WIDTH-PAGE_SHIFT-1:0] pfn_i
   );
     begin
-      make_page_desc = 32'h00000000;
-      make_page_desc[31:30] = DESC_DT_PAGE;
-      make_page_desc[29]    = valid_i;
-      make_page_desc[28]    = super_only_i;
-      make_page_desc[27]    = write_protect_i;
-      make_page_desc[23:12] = pfn_i[11:0];
+      make_page_desc = {DESCR_WIDTH{1'b0}};
+      make_page_desc[40] = super_only_i;
+      make_page_desc[34] = write_protect_i;
+      make_page_desc[33:32] = valid_i ? DESC_DT_PAGE : 2'b00;
+      make_page_desc[PAGE_SHIFT +: (PA_WIDTH-PAGE_SHIFT)] = pfn_i;
     end
   endfunction
 
-  mmu_top u_mmu_top (
+  mmu_top #(
+    .DESCR_WIDTH(DESCR_WIDTH)
+  ) u_mmu_top (
     .clk                 (clk),
     .rst_n               (rst_n),
     .req_valid_i         (req_valid_q),
@@ -238,7 +243,7 @@ module top_mmu_demo (
       req_rw_q                  <= 1'b1;
       req_fetch_q               <= 1'b0;
       walk_resp_valid_q         <= 1'b0;
-      walk_resp_data_q          <= 32'h00000000;
+      walk_resp_data_q          <= {DESCR_WIDTH{1'b0}};
       walk_resp_err_q           <= 1'b0;
       walk_pending_q            <= 1'b0;
       walk_req_addr_q           <= {PA_WIDTH{1'b0}};
@@ -279,7 +284,7 @@ module top_mmu_demo (
             walk_resp_data_q <= make_page_desc(1'b0, 1'b0, 1'b0, 12'h042);
           end
           default: begin
-            walk_resp_data_q <= 32'h00000000;
+            walk_resp_data_q <= {DESCR_WIDTH{1'b0}};
           end
         endcase
 
