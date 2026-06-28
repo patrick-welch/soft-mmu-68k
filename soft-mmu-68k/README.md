@@ -2,7 +2,8 @@
 
 This repository holds a modular, synthesizable soft MMU for 68k-family systems.
 The current tree has completed packets through `P11` plus the post-bring-up
-cleanup/fix pass that made the Basys 3 smoke demo synthesize and run cleanly.
+cleanup/fix pass, D2 descriptor datapath migration, M1 MMUSR/PTEST status-model
+specification, and MGV0 MATLAB-generated `perm_check` golden-vector ingestion.
 
 ## Current status
 
@@ -25,19 +26,26 @@ Implemented now:
 - `P10a/P10b`: freestanding 68k software-side validation scaffold for TT,
   permissions, and translated-vs-transparent maintenance behavior.
 - `P11`: Basys 3 smoke-demo top and Vivado project flow.
+- `D2`: default live walker / `mmu_top` descriptor boundary migrated to the
+  64-bit long-format page descriptor subset used by `descriptor_pack`.
+- `M1`: repo-local MMUSR/PTEST status-model specification.
+- `MGV0`: committed MATLAB-generated CSV vectors consumed by
+  `tb/unit/perm_check_tb.sv` as an additional `perm_check` verification layer.
 
 First-pass only:
 - `TT0/TT1` support is a narrow subset: base byte, mask byte, enable,
   user/supervisor matching, and program/data matching.
-- `MMUSR`, `PTEST`, `PLOAD`, and `PFLUSH` behavior is a control-layer shim, not
-  a full Motorola architectural model.
-- `descriptor_pack` is Motorola-aligned, but the current walker/integration
-  datapath still uses its own compact 32-bit page-descriptor image.
+- `MMUSR`, `PTEST`, `PLOAD`, and `PFLUSH` behavior is a control-layer shim plus
+  a repo-local status-model specification, not a full Motorola architectural
+  model.
+- The live walker is single-level. It consumes the long-format page descriptor
+  subset at the default boundary, but it does not implement full root/pointer
+  traversal or complete Motorola descriptor-tree behavior.
 - The Basys 3 design is a built-in smoke harness, not a 68k SoC integration.
 
 Still deferred:
 - Full Motorola TT/TTR field decoding and legality rules.
-- Full Motorola `MMUSR` synthesis and complete `PTEST` termination semantics.
+- Hardware-updated `MMUSR` synthesis and complete `PTEST` termination semantics.
 - Multi-level page-walk behavior and broader descriptor-type coverage.
 - A full bus-accurate system around the MMU.
 - Real 68k CPU execution on hardware.
@@ -53,6 +61,8 @@ Still deferred:
 - `sw/tests_68k/`: freestanding software-side expectation models.
 - `fpga/basys3/`: demo top, master XDC, and Vivado scripts.
 - `docs/design/`: design notes for the implemented subset and its caveats.
+- `scripts/matlab/`: MATLAB reference-model and golden-vector collateral for
+  selected verification flows.
 
 ## Lint and simulation
 
@@ -130,6 +140,19 @@ verilator --lint-only -Wall -I. \
 Note: the repo is not yet warning-clean under `verilator -Wall`; the Basys 3
 demo top still emits known empty-pin and unused-signal warnings in the current
 state.
+
+### MATLAB-backed golden vectors
+
+MGV0 proves the first committed MATLAB-backed vector flow in this repo:
+
+```text
+MATLAB reference model -> generated CSV -> SystemVerilog testbench -> HDL Regression Action
+```
+
+The current proven target is `perm_check`. The committed CSV lives at
+`tb/common/golden_vectors/perm_check_golden_vectors.csv`, and
+`tb/unit/perm_check_tb.sv` consumes it as an additional verification layer.
+This does not replace directed RTL tests or integration benches.
 
 Software scaffold:
 
