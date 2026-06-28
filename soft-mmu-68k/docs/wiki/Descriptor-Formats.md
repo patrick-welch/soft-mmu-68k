@@ -2,12 +2,9 @@
 
 This page documents the descriptor formats used by the current **Soft Memory Management Unit (Soft MMU)** project.
 
-It is critical to read this page carefully, because the current repo has **two different descriptor realities**:
-
-1. a **Motorola-aligned long-format descriptor subset** implemented by `descriptor_pack`
-2. a **compact first-pass live translation datapath descriptor format** still used by the current page-table walker and Basys 3 smoke harness
-
-This distinction is intentional in the current repo and should not be blurred.
+It is critical to read this page carefully, because the current repo has a
+Motorola-aligned long-format descriptor subset, but still only a minimal
+single-level live walker.
 
 ## Purpose
 
@@ -24,7 +21,7 @@ In this repo, descriptor handling is split between:
 - a combinational reference-style packing and unpacking module
 - the currently live translation datapath
 
-The purpose of this page is to explain both, and to explain where they are aligned and where they are not yet aligned.
+The purpose of this page is to explain both, and to explain where they are aligned and where they remain intentionally limited.
 
 ## Where implemented in repo
 
@@ -39,15 +36,16 @@ Primary sources for current descriptor behavior:
 
 ## The most important current repo caveat
 
-The current repo explicitly states that `descriptor_pack` is Motorola-aligned for a long-format subset, **but the live translation datapath has not yet migrated end-to-end to Motorola long-format descriptors**.
+D2 migrated the default live walker / `mmu_top` descriptor boundary to the
+64-bit long-format page descriptor subset aligned with `descriptor_pack`.
 
-That means:
+That means compact 32-bit page descriptors are no longer the default live walker
+boundary. Any source that still owns a compact image must convert it before
+driving `pt_walker`.
 
-- the descriptor-format work is real
-- the bit placements in `descriptor_pack` are meaningful
-- but the current walker and smoke-demo path still operate on their own compact page-descriptor image
-
-This is not an error in the docs. It is the current design state. The wiki should preserve that fact carefully. [[Glossary]] should also reflect it. 
+This does **not** mean the repo now implements full Motorola PMMU descriptor-tree
+behavior. The live walker is still single-level and still does not consume full
+root or pointer descriptor trees end to end.
 
 ## Descriptor categories in the current repo
 
@@ -69,12 +67,12 @@ Its design goals are:
 - align the bit placements with Motorola long-format descriptor conventions where possible
 - treat unsupported fields as zero
 - provide combinational pack and unpack behavior
-- avoid pretending that the entire datapath has already migrated to this format
+- avoid pretending that the entire Motorola PMMU descriptor model is implemented
 
 This is one of the most mature documentation choices in the repo because it separates:
 - **format alignment**
 from
-- **end-to-end datapath migration**
+- **complete architectural descriptor-tree behavior**
 
 ## Descriptor widths
 
@@ -86,7 +84,8 @@ The current descriptor-packing module defaults to:
 
 and describes itself as a **64-bit long-format-oriented subset**.
 
-The code explicitly checks that descriptor width is at least 64 for the current long-format defaults.
+The default live walker / `mmu_top` page descriptor boundary now also uses the
+64-bit page descriptor subset.
 
 ## Descriptor Type (DT)
 
@@ -129,7 +128,7 @@ In the current long-format subset, the root descriptor includes:
 The project documentation explicitly says that the other root-descriptor fields not currently exposed by the module interface are written as zero in this subset.
 
 ### Current project meaning
-The root descriptor in this repo is currently most important as a format-modeling concept inside `descriptor_pack`. The live integrated datapath still uses the register-level **Current Root Pointer (CRP)** as the walker root rather than consuming a full long-format root descriptor end to end.
+The root descriptor in this repo is currently most important as a format-modeling concept inside `descriptor_pack`. The live integrated datapath still uses the register-level **Current Root Pointer (CRP)** as the walker root rather than consuming a full long-format root descriptor tree end to end.
 
 ## Pointer descriptor
 
@@ -165,7 +164,7 @@ In the current long-format subset, the page descriptor includes:
 - **Descriptor Type (DT)**
 - page base physical address
 
-This is the descriptor kind that most directly overlaps conceptually with the live translation datapath, because the current page-table walker and permission path also operate on page-level policy bits.
+This is the descriptor kind now consumed by the default live walker boundary.
 
 ## Page attribute meanings
 
@@ -188,7 +187,7 @@ In the current project, this attribute is especially visible because the Basys 3
 ### Write Protect (WP)
 **Write Protect (WP)** indicates that writes are disallowed for the page.
 
-These attributes appear in the long-format subset in `descriptor_pack`, and closely related page-attribute concepts also appear in the live walker’s compact attribute output.
+These attributes appear in the long-format subset in `descriptor_pack`, and the live walker consumes the corresponding long-format page-descriptor fields at its default boundary.
 
 ## What `descriptor_pack` does
 
@@ -201,18 +200,17 @@ Its responsibilities are:
 - preserve compatibility behavior for older valid-style interfaces
 - enforce the current long-format-oriented default layout
 
-It does **not** by itself make the integrated datapath long-format end to end.
+It does **not** by itself make the integrated datapath a full Motorola descriptor-tree implementation.
 
 That distinction is fundamental.
 
 ## The live datapath descriptor format
 
-The current live page-table walker does **not** consume the 64-bit long-format subset from `descriptor_pack`.
+After D2, the current live page-table walker consumes the 64-bit long-format page descriptor subset at the default boundary.
 
-Instead, `pt_walker.v` documents its own **compact default page-descriptor layout**. In that layout, the walker expects fields such as:
+The walker consumes page-level fields such as:
 
 - descriptor type
-- valid bit
 - supervisor bit
 - write-protect bit
 - cache-inhibit bit
@@ -220,20 +218,12 @@ Instead, `pt_walker.v` documents its own **compact default page-descriptor layou
 - used bit
 - page-frame information
 
-This means the live datapath is still using a compact first-pass page-descriptor image rather than the long-format descriptor subset.
+The walker still remains intentionally minimal:
 
-## Why the current split exists
-
-The current split between `descriptor_pack` and the live datapath is understandable and actually healthy documentation-wise.
-
-It allows the project to:
-
-- bring descriptor bit-format alignment closer to Motorola conventions
-- document that work honestly
-- keep the current walker and integration path simple and reviewable
-- avoid claiming more datapath migration than has actually been completed
-
-This is exactly the kind of design discipline the wiki should preserve.
+- single-level only
+- one descriptor read per miss
+- no full root/pointer traversal
+- no complete TC/CRP/SRP-driven Motorola table-walk semantics
 
 ## Descriptor formats in the Basys 3 smoke demo
 
@@ -246,16 +236,17 @@ That responder builds a small set of canned page-descriptor cases for the live w
 - an invalid descriptor
 - an abstract bus-error case
 
-Those demo descriptors are part of the compact live datapath model, not proof that the hardware demo is already using end-to-end long-format Motorola descriptors.
+Those demo descriptors are smoke-level evidence for the current subset. They are not proof that the hardware demo implements full Motorola descriptor-tree behavior.
 
 ## What this page should not claim
 
 This page should **not** claim that the current repo has already implemented:
 
-- full Motorola long-format descriptor use throughout the translation datapath
+- full Motorola descriptor-tree walking
 - full multi-level descriptor-tree walking
 - every Motorola descriptor field
 - full long-format legality or behavior propagation through the current board demo
+- full Motorola PMMU compatibility
 
 The current repo docs explicitly warn against that reading.
 
@@ -275,7 +266,7 @@ These are currently packed as zero because they are not exposed on the module in
 When reading the repo, apply this rule:
 
 - if you are asking **“What descriptor format is the project trying to model?”**, look at `descriptor_pack`
-- if you are asking **“What descriptor image does the current integrated translation datapath actually consume?”**, look at `pt_walker.v` and the Basys 3 smoke-demo responder
+- if you are asking **“What descriptor image does the current integrated translation datapath actually consume?”**, look at `pt_walker.v`, `mmu_top.v`, and the Basys 3 smoke-demo responder
 
 That rule will prevent most confusion.
 
@@ -284,9 +275,9 @@ That rule will prevent most confusion.
 The current descriptor story in this repo is:
 
 - **implemented:** Motorola-aligned long-format subset in `descriptor_pack`
-- **implemented:** compact first-pass page-descriptor image in the live walker/datapath
-- **not yet complete:** end-to-end migration of the live datapath to long-format Motorola descriptors
+- **implemented:** 64-bit long-format page descriptor subset at the default live walker / `mmu_top` boundary
 - **not yet complete:** full multi-level descriptor tree support
+- **not yet complete:** full root/pointer traversal through the live datapath
 - **not yet complete:** full field coverage for Motorola descriptor variants
 
 ## Related pages
