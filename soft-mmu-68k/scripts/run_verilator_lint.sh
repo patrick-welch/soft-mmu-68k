@@ -4,7 +4,7 @@ set -u
 cd "$(dirname "$0")/.."
 
 print_cmd() {
-  printf ' +'
+  printf %s +
   printf ' %q' "$@"
   printf '\n'
 }
