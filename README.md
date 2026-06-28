@@ -28,7 +28,7 @@ The goal is to make a 68K-compatible MMU design that is:
 - **Verifiable**: backed by unit tests, integration tests, and eventually board-level smoke demos.
 - **Historically grounded**: aligned with the vocabulary and architecture of classic Motorola 68K memory-management hardware.
 
-This is part of the broader **Electron Pushers** HDL learning and retro-computing effort.
+This is a personal HDL learning and retro-computing engineering project.
 
 ## Current implementation scope
 
