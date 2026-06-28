@@ -1,6 +1,6 @@
 # Project Documentation
 
-This folder hosts canonical docs for the Electron Pushers Soft MMU (68k).
+This folder hosts canonical documentation for the Soft MMU for 68K Systems project.
 
 - `charter/`: project intent and workflow
 - `refs/`: vendor/manual references we cite

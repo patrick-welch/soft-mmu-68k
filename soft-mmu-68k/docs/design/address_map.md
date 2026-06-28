@@ -22,10 +22,10 @@ decode and permission logic.[^PRM-FC][^68030-UM-FC]
 - `u_perm = {UX, UW, UR}` and `s_perm = {SX, SW, SR}` remain the checker inputs.
 - A user denial is marked `privilege_related` only when the supervisor bank
   would allow that same access class.
-- Malformed request encodings are reported as `bad_req`; they are not silently
-  converted into read, write, or execute faults.
-- `tt_bypass` suppresses page-derived permission denial only for an otherwise
-  valid request.
+- Without `tt_bypass`, malformed request encodings are denied with `bad_req`
+  asserted; multi-hot requests may also report applicable permission
+  diagnostics.
+- For `perm_check`, `tt_bypass` wins: `allow=1` and `fault=0`.
 
 **CPU/special space treatment**
 - CPU/special space is decoded only for `FC=3'b111`.
@@ -33,7 +33,8 @@ decode and permission logic.[^PRM-FC][^68030-UM-FC]
   decode.
 - First-pass TT/TTR qualification explicitly excludes CPU/special space.
 - CPU-space requests therefore continue down the normal translated or probe path
-  in the current subset; TT bypass is never asserted for `FC=3'b111`.
+  in the current subset; TT bypass is never asserted for `FC=3'b111` by
+  `mmu_top` TT qualification.
 
 **Transparent-translation behavior implemented now**
 - `mmu_top` performs TT qualification ahead of TLB lookup and page-walk use.
@@ -55,8 +56,9 @@ decode and permission logic.[^PRM-FC][^68030-UM-FC]
 - Reserved FC encodings and CPU/special space do not transparent-match.
 - On a transparent match, page-table translation is bypassed and the physical
   address is the logical address resized onto the PA bus.
-- Under the current first-pass policy, a transparent match also bypasses
-  page-derived permission denial for a valid request.
+- Under the current first-pass policy, a transparent match asserts the bypass
+  path into `perm_check`; inside `perm_check`, that bypass produces `allow=1`
+  and `fault=0`.
 - `resp_hit_o` remains reserved for translated/TLB-backed hits. A successful TT
   bypass therefore returns `resp_valid_o=1`, `resp_fault_o=0`, identity-style
   `resp_pa_o`, and `resp_hit_o=0`.
@@ -96,7 +98,7 @@ behavior.
 - Full Motorola TT register decoding beyond the narrow `TTx[31:24]`,
   `TTx[23:16]`, and `TTx[15:11]` subset above.
 - Full Motorola legality rules for transparent translation.
-- Architecturally complete `MMUSR` synthesis for `PTEST` outcomes.
+- Hardware-updated `MMUSR` synthesis for complete `PTEST` outcomes.
 - Precise modeling of all Motorola-visible `PTEST`, `PLOAD`, and `PFLUSH`
   completion and termination cases.
 - Any claim that CPU-space accesses are fully filtered or faulted exactly as a
@@ -105,7 +107,8 @@ behavior.
 **Known issues / bring-up notes**
 - The current TT implementation should be described as a first-pass subset only.
 - The current `MMUSR` and `PTEST` behavior should be described as first-pass
-  status shims, not full Motorola compatibility.
+  status shims plus the repo-local M1 status-model specification, not full
+  Motorola compatibility.
 - The Basys 3 demo is a hardware smoke harness with a tiny built-in descriptor
   responder. It is not a full system and does not execute a 68k core.
 - Software-side expectations in `sw/tests_68k/` intentionally model the current
