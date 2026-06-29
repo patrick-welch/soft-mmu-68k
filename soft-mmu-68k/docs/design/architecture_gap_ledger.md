@@ -12,7 +12,7 @@ compatibility.
 
 The project name `SM68861` has been adopted for public-facing documentation.
 
-This does not change the architecture baseline, compatibility status, or implementation claims. The public tagline is **Soft PMMU for 68k-family systems**. The initial technical focus remains MC68020 + MC68851-style PMMU behavior, with broader 68k-family compatibility profiles tracked as future work.
+This does not change the architecture baseline, compatibility status, or implementation claims. The public tagline is **Soft MMU for 68k-family systems**. The initial technical focus remains MC68020 + MC68851-style PMMU behavior, with broader 68k-family compatibility profiles tracked as future work.
 
 ## Current verified baseline
 
