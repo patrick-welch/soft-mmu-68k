@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This page explains the current implemented architecture of the **Soft Memory Management Unit (Soft MMU)** in this repository.
+This page explains the current implemented architecture of **SM68861**, the soft Memory Management Unit / soft Paged Memory Management Unit in this repository.
 
 It is not a description of an ideal future design. It is a description of the **implemented repo state**.
 
@@ -16,6 +16,10 @@ The project implements a modular, synthesizable **Memory Management Unit (MMU)**
 - permission enforcement
 - first-pass flush, probe, and preload control operations
 - Basys 3 smoke-demo bring-up
+
+The `SM68861` name identifies the project; it does not imply full Motorola PMMU compatibility beyond the behavior currently implemented and tested in this repository.
+
+Top-level project language describes SM68861 broadly as a soft PMMU for 68k-family systems; deeper architecture pages preserve the initial MC68020 + MC68851-style technical focus.
 
 The repository describes this as implemented through packet `P11`, with later documentation and implementation packets including D2, M1, and MGV0. Several behaviors remain explicitly first-pass only. These include **Transparent Translation (TT0 / TT1)**, hardware-updated **MMU Status Register (MMUSR)** behavior, **Page Test (PTEST)** semantics, **Page Load (PLOAD)** semantics, **Page Flush (PFLUSH)** semantics, and full Motorola descriptor-tree behavior. [[Glossary]] should be read alongside this page.
 
