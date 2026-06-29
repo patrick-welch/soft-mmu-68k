@@ -6,7 +6,7 @@ This document records possible future applications for SM68861 without turning t
 
 ## Public project identity
 
-SM68861 is a soft PMMU for 68k-family systems.
+SM68861 is a soft MMU for 68k-family systems.
 
 ## Current project center
 
