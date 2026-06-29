@@ -1,8 +1,18 @@
-# Soft MMU for 68K Systems Wiki
+# SM68861 Wiki
 
-Welcome to the Wiki for the Soft MMU for 68K Systems project.
+Welcome to the Wiki for **SM68861**, the soft MMU project for 68k-family systems.
 
 This Wiki exists to make the project readable, teachable, and reviewable as an engineering system. It supports both active development and careful study.
+
+## Project identity
+
+`SM68861` means **Soft MMU 68861**.
+
+The public tagline is:
+
+> **SM68861 — Soft MMU for 68k-family systems**
+
+The name gives the project a stable public identity while keeping the technical claims conservative. Top-level pages should remain approachable to casual readers. Deeper design pages should preserve the more specific initial architecture focus: MC68020 + MC68851-style PMMU behavior in the historical MC68020 + MC68851 + MC68881/MC68882 system context.
 
 ## What this project is
 
@@ -28,7 +38,7 @@ Several areas are present only as a first-pass subset and should not be overstat
 - Transparent Translation (`TT0` / `TT1`) is implemented only as a narrow subset.
 - MMU Status Register (`MMUSR`) behavior is first-pass and not yet a full Motorola architectural model.
 - Page Test (`PTEST`), Page Load (`PLOAD`), and Page Flush (`PFLUSH`) behavior is currently implemented as a control-layer shim rather than a complete architectural model.
-- `descriptor_pack` is Motorola-aligned for a long-format subset, but the live translation datapath has not yet fully migrated end-to-end to Motorola long-format descriptors.
+- The live walker consumes the 64-bit long-format page descriptor subset at the default boundary, but full root/pointer traversal and full descriptor-tree behavior are still deferred.
 - The Basys 3 hardware design is a smoke demo, not a full 68k system-on-chip integration.
 
 These distinctions matter. This Wiki should be precise about what is implemented now, what is partially implemented, and what is still deferred.
