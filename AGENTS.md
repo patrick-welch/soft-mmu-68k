@@ -160,14 +160,27 @@ Golden vectors live under `soft-mmu-68k/tb/common/golden_vectors/`.
 
 MATLAB is a reference-modeling and vector-generation layer. It does not replace RTL, SystemVerilog benches, shell scripts, or GitHub Actions regression.
 
+Do not require MATLAB to run in ordinary HDL regression unless the packet explicitly adds MATLAB execution to CI or the local test flow.
+
+If MATLAB was not run, report it explicitly. Do not imply generated vectors were regenerated or validated by MATLAB unless that actually happened.
+
 Do not modify MATLAB source, generated CSV vectors, or CSV-consuming testbenches unless the packet explicitly assigns that work.
 
 Do not hand-edit generated CSV files unless the packet explicitly states that the CSV itself is defective and must be corrected.
+
+Generated vector files must be deterministic. If randomness is used, the generator must set and document a fixed seed.
+
+CSV golden-vector files must include a stable header row.
+
+When practical, consuming SystemVerilog testbenches should validate the expected row count.
+
+When adding or changing MATLAB-generated vectors, include the regeneration command or script path in the PR body.
 
 When adding MATLAB-backed vectors, document:
 
 - the MATLAB reference model used
 - the generator used
+- the regeneration command or script path
 - the generated-vector path
 - the consuming SystemVerilog testbench
 - the behavioral scope being modeled
