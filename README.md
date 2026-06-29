@@ -1,6 +1,12 @@
-# Soft MMU for 68K Systems
+# SM68861 — Soft PMMU for 68K Systems
 
-A modular, synthesizable **soft Memory Management Unit (MMU)** for Motorola 68K-family systems.
+A modular, synthesizable **soft Memory Management Unit (MMU) / soft Paged Memory Management Unit (PMMU)** for Motorola 68K-family systems.
+
+`SM68861` is the named soft-MMU / soft-PMMU core in this repository.
+
+The name means **Soft MMU 68861**. It identifies this project as a synthesizable, test-driven 68k-family memory-management core. It is not a Motorola part number, not an `MC`-prefixed device, and not currently a drop-in replacement for a physical MC68851.
+
+The public project identity is broad: **Soft PMMU for 68k-family systems**. The initial technical architecture focus is narrower: MC68020 + MC68851-style paged memory management, with MC68881/MC68882 coprocessor-system context. Later MC68030, MC68040, MC68060, Macintosh, Amiga, Atari, and 68080-class possibilities are roadmap opportunities, not current compatibility claims.
 
 This project is an open-source hardware effort to build, document, and verify a 68K-style MMU in Verilog/SystemVerilog. The design is inspired by the Motorola MC68851 paged memory management unit and the later on-chip 68030/68040/68060 MMU lineage, but the current repo should be read as an **incremental engineering implementation**, not a finished drop-in Motorola-compatible replacement.
 
@@ -20,7 +26,7 @@ Then continue with:
 
 ## What this is
 
-The goal is to make a 68K-compatible MMU design that is:
+The goal is to make a 68K-family soft PMMU design that is:
 
 - **Readable**: organized as small RTL blocks with focused responsibilities.
 - **Teachable**: documented through a Wiki glossary, architecture notes, and source-to-concept mapping.
