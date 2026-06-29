@@ -1,6 +1,13 @@
-# Soft MMU for 68K Systems
+# SM68861 — Soft PMMU for 68K Systems
 
-This repository holds a modular, synthesizable soft MMU for 68k-family systems.
+This repository holds `SM68861`, a modular, synthesizable soft MMU / soft PMMU for 68k-family systems.
+
+`SM68861` is the named soft-MMU / soft-PMMU core in this repository.
+
+The name means **Soft MMU 68861**. It identifies this project as a synthesizable, test-driven 68k-family memory-management core. It is not a Motorola part number, not an `MC`-prefixed device, and not currently a drop-in replacement for a physical MC68851.
+
+The public project identity is broad: **Soft PMMU for 68k-family systems**. The initial technical architecture focus is narrower: MC68020 + MC68851-style paged memory management, with MC68881/MC68882 coprocessor-system context. Later MC68030, MC68040, MC68060, Macintosh, Amiga, Atari, and 68080-class possibilities are roadmap opportunities, not current compatibility claims.
+
 The current tree has completed packets through `P11` plus the post-bring-up
 cleanup/fix pass, D2 descriptor datapath migration, M1 MMUSR/PTEST status-model
 specification, and MGV0 MATLAB-generated `perm_check` golden-vector ingestion.
