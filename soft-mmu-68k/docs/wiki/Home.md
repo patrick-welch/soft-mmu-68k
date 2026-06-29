@@ -1,6 +1,6 @@
 # SM68861 Wiki
 
-Welcome to the Wiki for **SM68861**, the soft MMU / soft PMMU project for 68k-family systems.
+Welcome to the Wiki for **SM68861**, the soft MMU project for 68k-family systems.
 
 This Wiki exists to make the project readable, teachable, and reviewable as an engineering system. It supports both active development and careful study.
 
@@ -10,13 +10,13 @@ This Wiki exists to make the project readable, teachable, and reviewable as an e
 
 The public tagline is:
 
-> **SM68861 — Soft PMMU for 68k-family systems**
+> **SM68861 — Soft MMU for 68k-family systems**
 
 The name gives the project a stable public identity while keeping the technical claims conservative. Top-level pages should remain approachable to casual readers. Deeper design pages should preserve the more specific initial architecture focus: MC68020 + MC68851-style PMMU behavior in the historical MC68020 + MC68851 + MC68881/MC68882 system context.
 
 ## What this project is
 
-This repository contains a modular, synthesizable Soft Memory Management Unit (Soft MMU) / Soft Paged Memory Management Unit (Soft PMMU) for 68k-family systems.
+This repository contains a modular, synthesizable Soft Memory Management Unit (Soft MMU) for 68k-family systems.
 
 The current implementation includes the core building blocks needed for a first-pass translated access path:
 
