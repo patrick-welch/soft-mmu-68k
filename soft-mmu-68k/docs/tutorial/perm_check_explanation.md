@@ -1,3 +1,9 @@
+# `perm_check.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `perm_check.v` does
 
 `perm_check.v` defines a combinational permission checker named `perm_check`. Its job is to decide whether one requested access is allowed under user or supervisor permissions, and to produce a compact diagnostic fault field when it is not allowed.
@@ -14,6 +20,12 @@ It also understands two permission banks:
 - supervisor permissions, `s_perm`
 
 This module does not decode Motorola descriptors directly. It consumes already-extracted permission bits and produces an allow/fault result.
+
+---
+
+## Not implemented here
+
+This module does not decode descriptors, inspect bus cycles, perform translation, or manage TLB state. It only checks already-supplied permission vectors and request classification bits.
 
 ---
 

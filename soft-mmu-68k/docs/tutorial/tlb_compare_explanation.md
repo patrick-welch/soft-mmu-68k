@@ -1,3 +1,9 @@
+# `tlb_compare.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `tlb_compare.v` does
 
 `tlb_compare.v` defines a tiny combinational helper named `tlb_compare`. It checks one TLB entry against one lookup request.
@@ -9,6 +15,12 @@ The helper answers three questions:
 - if it hits, what attribute bits should be returned?
 
 This module compares a single entry only. It does not store a TLB array, choose an index, refill entries, or invalidate entries. Those responsibilities live in `tlb_dm.v`.
+
+---
+
+## Not implemented here
+
+This module does not store entries, choose indexes, refill TLB state, invalidate entries, or perform associative lookup. It only compares one supplied TLB entry against one lookup request.
 
 ---
 

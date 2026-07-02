@@ -1,3 +1,9 @@
+# `flush_ctrl.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `flush_ctrl.v` does
 
 `flush_ctrl.v` defines a small sequential hardware module named `flush_ctrl`. Its job is to accept high-level MMU control commands and turn them into simple control pulses, request handshakes, and status results for the rest of the soft MMU.
@@ -10,6 +16,12 @@ In practical terms, it is the control shim for operations such as:
 - **Preload**: ask another block to begin a preload request.
 
 This module is intentionally first-pass control logic. It is not a full architectural model of every `PFLUSH`, `PLOAD`, or `PTEST` detail. The comments in the RTL call that out directly, especially for the deferred full PTEST/MMUSR behavior.
+
+---
+
+## Not implemented here
+
+This module does not implement the full PTEST, PLOAD, or PFLUSH architecture. It emits flush pulses, probe requests, preload requests, and small status records; the actual TLB maintenance, probe datapath, page walking, and complete MMUSR/PTEST model live outside this file or remain deferred.
 
 ---
 

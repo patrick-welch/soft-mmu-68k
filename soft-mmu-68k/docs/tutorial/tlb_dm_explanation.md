@@ -1,3 +1,9 @@
+# `tlb_dm.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `tlb_dm.v` does
 
 `tlb_dm.v` defines a minimum direct-mapped TLB, also described in the comments as an ATC/TLB. It stores one entry per index, performs a combinational lookup of the indexed entry, supports synchronous refill, and supports whole-TLB or targeted invalidation.
@@ -11,6 +17,12 @@ This module is intentionally simple:
 - address-and-function-code targeted invalidate
 
 The actual one-entry compare is delegated to `tlb_compare.v`.
+
+---
+
+## Not implemented here
+
+This module does not implement a fully associative MC68851 ATC, multi-way replacement, descriptor walking, or permission checking. It provides the current direct-mapped TLB storage, lookup, refill, and invalidation behavior.
 
 ---
 

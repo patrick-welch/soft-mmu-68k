@@ -1,11 +1,19 @@
+# `descriptor_pack.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `descriptor_pack.v` does
 
-`descriptor_pack.v` defines a combinational hardware module named `descriptor_pack`. Its job is to convert descriptor fields into a packed 64-bit descriptor word, and also convert a packed descriptor word back into individual fields.
+`descriptor_pack.v` defines a combinational hardware module named `descriptor_pack`. Its job is to pack supported root, pointer, and page descriptor fields into the current long-format-oriented descriptor word, and also unpack a descriptor word back into individual fields. The default descriptor width is 64 bits. `DESCR_WIDTH` is parameterized, but the current layout requires at least 64 bits.
 
 In other words, it performs two related operations:
 
-- **Pack**: take separate fields like valid bit, descriptor type, limit, address, write-protect bit, cache-inhibit bit, etc., and place them into specific bit positions inside `packed_o`.
+- **Pack**: take separate descriptor inputs and place supported fields into the current long-format-oriented descriptor layout. The compatibility valid inputs do not become standalone descriptor bits; they gate whether the descriptor type field is forced to `00`.
 - **Unpack**: take an incoming descriptor word `packed_i` and extract those same fields into separate output signals.
+
+The compatibility valid inputs are `r_v_i`, `p_v_i`, and `pg_v_i`. Validity in the packed descriptor is represented by nonzero `DT`, not by a separately stored valid bit.
 
 The module supports three descriptor kinds:
 
@@ -22,6 +30,12 @@ input wire [1:0] kind_i
 ```
 
 When packing, `kind_i` decides whether the module builds a root descriptor, pointer descriptor, or page descriptor.
+
+---
+
+## Not implemented here
+
+This module does not walk descriptor trees, fetch descriptors from memory, check permissions, or model full Motorola descriptor traversal. It only packs and unpacks the supported fields in the current descriptor layout.
 
 ---
 

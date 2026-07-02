@@ -1,3 +1,9 @@
+# `mmu_regs.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `mmu_regs.v` does
 
 `mmu_regs.v` defines the software-visible MMU register block used by the current soft MMU design. It stores a first-pass image of key Motorola-style MMU registers and provides a simple read/write interface for software or testbench access.
@@ -12,6 +18,12 @@ The registers modeled here are:
 - `mmusr`: MMU status register image
 
 This is a register block, not a translator. It does not perform TLB lookup, page walking, permission checking, or transparent-translation matching by itself.
+
+---
+
+## Not implemented here
+
+This module does not perform translation, TLB maintenance, descriptor walking, permission checks, or full PMOVE/MMUSR side effects. It stores and exposes the current software-visible register image used by the rest of the RTL.
 
 ---
 

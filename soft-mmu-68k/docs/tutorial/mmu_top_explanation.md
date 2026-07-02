@@ -1,3 +1,9 @@
+# `mmu_top.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `mmu_top.v` does
 
 `mmu_top.v` defines the first-pass integration wrapper for the core soft MMU path. It wires together the register block, function-code decoder, transparent-translation matching, direct-mapped TLB, page-table walker, permission checkers, and flush/probe/preload control.
@@ -8,6 +14,12 @@ At a high level, this module handles two kinds of activity:
 - MMU control commands, through the `cmd_*` and `status_*` ports
 
 This is intentionally a subset implementation. The header comments call out single outstanding translation requests, direct-mapped TLB lookup, minimal walker-backed refill, first-pass TT/TTR qualification, and deferred full Motorola MMUSR/PTEST behavior.
+
+---
+
+## Not implemented here
+
+This wrapper does not claim complete MMUSR, PTEST, or Motorola PMMU behavior. It integrates the current first-pass translation path, TLB, walker, permission checks, transparent-translation handling, and control shim behavior implemented in this repository.
 
 ---
 
@@ -132,7 +144,7 @@ localparam [1:0] WALK_FAULT_UNMAPPED = 2'b10;
 localparam [1:0] WALK_FAULT_BUS      = 2'b11;
 ```
 
-`ST_IDLE` can perform a CPU lookup or service a preload lookup.
+`ST_IDLE` can select among a CPU lookup, a pending probe lookup, or a preload lookup. The lookup-source priority is CPU > pending probe > preload, matching the arbitration described below.
 
 `ST_START_WALK` launches the walker for one cycle.
 
@@ -374,7 +386,7 @@ assign tt_lookup_pa  = va_to_pa(lookup_va);
 assign tt_cpu_bypass = lookup_src_cpu && tt_match_any;
 ```
 
-Transparent translation bypasses descriptor translation and permission checking for CPU requests in this first-pass implementation.
+Transparent translation bypasses descriptor translation and page-derived permission denial. The hit-path `perm_check` still receives `tt_cpu_bypass`; in the current first-pass policy that bypass makes `perm_check` return `allow=1` and `fault=0`.
 
 ---
 
@@ -637,7 +649,7 @@ The top-level `always @(posedge clk)` block uses nonblocking assignments to upda
 
 The first gotcha is that this wrapper supports a single outstanding CPU translation request. A miss is saved in pending registers while the walker runs.
 
-The second gotcha is that TT/TTR matching happens before the TLB and walker for CPU requests. A TT match returns an identity-style PA and bypasses permission checking in this first-pass implementation.
+The second gotcha is that TT/TTR matching happens before the TLB and walker for CPU requests. A TT match returns an identity-style PA, bypasses descriptor translation, and feeds `tt_cpu_bypass` into the hit-path `perm_check`. In the current first-pass policy that makes `perm_check` return `allow=1` and `fault=0`, bypassing page-derived permission denial.
 
 The third gotcha is that probe and preload are folded into the same lookup fabric. CPU requests have priority, then pending probes, then preload lookups.
 

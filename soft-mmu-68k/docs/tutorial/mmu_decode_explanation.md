@@ -1,3 +1,9 @@
+# `mmu_decode.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `mmu_decode.v` does
 
 `mmu_decode.v` defines a small combinational helper named `mmu_decode`. Its job is to interpret the Motorola 68k function-code field and turn it into simple classification signals for the rest of the MMU.
@@ -9,6 +15,12 @@ The input is the 3-bit function code, usually written as `FC[2:0]`. The outputs 
 - is this CPU/special space?
 
 This module does not translate addresses, check permissions, or store state. It only decodes the function-code class.
+
+---
+
+## Not implemented here
+
+This module does not validate full Motorola function-code legality, perform address translation, enforce permissions, or store MMU state. It only classifies the function-code bits used by the current RTL.
 
 ---
 

@@ -1,3 +1,9 @@
+# `pt_walker.v` Tutorial
+
+> This tutorial explains the current SM68861 RTL implementation. It is not a
+> complete Motorola PMMU specification and should not be read as a compatibility
+> claim beyond the behavior implemented and tested in this repository.
+
 ## What `pt_walker.v` does
 
 `pt_walker.v` defines a minimal single-level page-table walker named `pt_walker`. Its job is to handle a TLB miss by reading one descriptor from an abstract memory interface, checking whether that descriptor is a valid page descriptor, and returning refill information or a fault.
@@ -9,6 +15,12 @@ This is intentionally small and first-pass:
 - it forwards descriptor attributes for later permission checking
 - it reports invalid, unmapped, and bus-error faults
 - it does not perform permission checking itself
+
+---
+
+## Not implemented here
+
+This walker does not implement full Motorola multi-level descriptor traversal, descriptor-tree protection rules, or permission fault handling. It performs the current single-level descriptor read and returns refill or fault information to the surrounding MMU path.
 
 ---
 
