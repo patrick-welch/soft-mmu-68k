@@ -1,18 +1,49 @@
-# Project Documentation
+# SM68861 Project Documentation
 
-This folder hosts canonical documentation for the Soft MMU for 68K Systems project.
+This folder hosts canonical documentation for the SM68861 project.
+
+SM68861 is a soft MMU for 68k-family systems. Deeper design documents may use
+PMMU terminology when discussing MC68020 + MC68851-style paged memory-management
+behavior, but top-level documentation should use the clearer public project
+identity.
 
 - `charter/`: project intent and workflow
-- `refs/`: vendor/manual references we cite
-- `design/`: our design decisions and deltas
+- `refs/`: vendor/manual references used for engineering background
+- `design/`: design decisions, implementation notes, and compatibility gaps
+- `process/`: development and review workflow notes
+- `roadmap/`: future opportunities and non-goal tracking
+- `wiki/`: GitHub Wiki source pages
 
-## Citing sources
-Use footnotes like: [^68851-UM-§4.2], [^68030-UM-TT0TT1], [^PRM-PFLUSH].
-Define them at file end with manual + section and a stable link/identifier.
+## Citation and reference rules
 
-## Scope anchors (fill with exact cites)
-- Programming model: CRP, SRP, TC, TT0/TT1, MMUSR [^68851-UM], [^68030-UM]
-- ATC/TLB semantics, PLOAD/PFLUSH/PTEST [^68030-UM], [^68040-UM], [^PRM]
-- Transparent translation (TTRs) [^68040-UM], [^68060-UM]
+Use human-readable footnotes only when the document makes a claim that depends on
+a specific manual, manual section, or primary source.
 
-*See `refs/README.md` for the master list.*
+Preferred pattern:
+
+```md
+Claim text that depends on the manual.[^SOURCE-SHORT-NAME]
+
+*Manual refs used:* [^SOURCE-SHORT-NAME]
+
+[^SOURCE-SHORT-NAME]: Manual title, section or chapter name, and the specific
+    topic being relied on.
+```
+
+Do not commit placeholder citation anchors such as `section __`, `page __`, or
+`fill with exact cites`.
+
+Do not leave source TODOs in public-facing documentation. If the source is not
+known well enough to cite clearly, either remove the claim or keep it in a
+working note until the citation is known.
+
+## Documentation rules
+
+- Keep public-facing language clear and conservative.
+- Do not claim full Motorola PMMU compatibility unless the behavior is implemented
+  and verified.
+- Distinguish implemented behavior, first-pass subset behavior, and deferred
+  compatibility work.
+- Use SM68861 / soft MMU language in top-level public documentation.
+- Use PMMU language where the document is specifically discussing MC68851-style
+  paged memory-management behavior.
