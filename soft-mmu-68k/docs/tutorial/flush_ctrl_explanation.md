@@ -17,12 +17,16 @@ This module is intentionally first-pass control logic. It is not a full architec
 
 Unlike `descriptor_pack.v`, this file is not purely combinational. It has a clock and reset:
 
+Source: [rtl/core/flush_ctrl.v:L42-L43](../../rtl/core/flush_ctrl.v#L42-L43)
+
 ```verilog
 input wire clk,
 input wire rst_n,
 ```
 
 The main behavior is inside:
+
+Source: [rtl/core/flush_ctrl.v:L163](../../rtl/core/flush_ctrl.v#L163)
 
 ```verilog
 always @(posedge clk) begin
@@ -31,6 +35,8 @@ always @(posedge clk) begin
 That means the state and registered outputs update on the rising edge of `clk`.
 
 The reset is active-low:
+
+Source: [rtl/core/flush_ctrl.v:L164](../../rtl/core/flush_ctrl.v#L164)
 
 ```verilog
 if (!rst_n) begin
@@ -44,6 +50,8 @@ When `rst_n` is low, the module returns to the idle state and clears all registe
 
 At the top:
 
+Source: [rtl/core/flush_ctrl.v:L1-L2](../../rtl/core/flush_ctrl.v#L1-L2)
+
 ```verilog
 `timescale 1ns/1ps
 `default_nettype none
@@ -54,6 +62,8 @@ At the top:
 `default_nettype none` is a safety directive. It prevents Verilog from silently creating undeclared wires because of typos. In RTL, that is important because a misspelled signal should cause an error instead of becoming an accidental net.
 
 At the bottom:
+
+Source: [rtl/core/flush_ctrl.v:L271](../../rtl/core/flush_ctrl.v#L271)
 
 ```verilog
 `default_nettype wire
@@ -67,6 +77,8 @@ This restores normal Verilog default-net behavior for files compiled afterward.
 
 The module begins with width parameters:
 
+Source: [rtl/core/flush_ctrl.v:L30-L34](../../rtl/core/flush_ctrl.v#L30-L34)
+
 ```verilog
 parameter integer VA_WIDTH     = 24,
 parameter integer PA_WIDTH     = 24,
@@ -78,6 +90,8 @@ parameter integer CMD_WIDTH    = 3,
 These let the same control block adapt to different address, function-code, status, and command widths.
 
 The module also defines command encodings:
+
+Source: [rtl/core/flush_ctrl.v:L36-L40](../../rtl/core/flush_ctrl.v#L36-L40)
 
 ```verilog
 parameter [CMD_WIDTH-1:0] CMD_NOP         = 3'd0,
@@ -94,6 +108,8 @@ These command values are compared against `cmd_op_i` when a command is accepted.
 ## Command input interface
 
 The command input side is:
+
+Source: [rtl/core/flush_ctrl.v:L45-L50](../../rtl/core/flush_ctrl.v#L45-L50)
 
 ```verilog
 input  wire                 cmd_valid_i,
@@ -114,11 +130,15 @@ output wire                 busy_o,
 
 `cmd_ready_o` is true only when the state machine is idle:
 
+Source: [rtl/core/flush_ctrl.v:L139](../../rtl/core/flush_ctrl.v#L139)
+
 ```verilog
 assign cmd_ready_o = (state_q == ST_IDLE);
 ```
 
 `busy_o` is true when the state machine is not idle:
+
+Source: [rtl/core/flush_ctrl.v:L140](../../rtl/core/flush_ctrl.v#L140)
 
 ```verilog
 assign busy_o = (state_q != ST_IDLE);
@@ -131,6 +151,8 @@ The important handshake rule is simple: this module accepts a new command only w
 ## Flush outputs
 
 The flush output side is:
+
+Source: [rtl/core/flush_ctrl.v:L52-L55](../../rtl/core/flush_ctrl.v#L52-L55)
 
 ```verilog
 output reg                 flush_all_o,
@@ -145,6 +167,8 @@ output reg [FC_WIDTH-1:0]  flush_fc_o,
 
 For a targeted flush, the module also latches the address and function code into:
 
+Source: [rtl/core/flush_ctrl.v:L54-L55](../../rtl/core/flush_ctrl.v#L54-L55)
+
 ```verilog
 flush_addr_o
 flush_fc_o
@@ -158,6 +182,8 @@ Those operand outputs tell the downstream TLB logic which virtual address and fu
 
 The probe request side is:
 
+Source: [rtl/core/flush_ctrl.v:L57-L59](../../rtl/core/flush_ctrl.v#L57-L59)
+
 ```verilog
 output reg                probe_req_valid_o,
 output reg [VA_WIDTH-1:0] probe_addr_o,
@@ -167,6 +193,8 @@ output reg [FC_WIDTH-1:0] probe_fc_o,
 When a probe command is accepted, `flush_ctrl` pulses `probe_req_valid_o`, drives `probe_addr_o` and `probe_fc_o`, saves the probed address internally, and moves to `ST_WAIT_PROBE`.
 
 The probe response side is:
+
+Source: [rtl/core/flush_ctrl.v:L60-L63](../../rtl/core/flush_ctrl.v#L60-L63)
 
 ```verilog
 input wire                    probe_resp_valid_i,
@@ -189,6 +217,8 @@ input wire [STATUS_WIDTH-1:0] probe_resp_status_i,
 
 The preload request side is:
 
+Source: [rtl/core/flush_ctrl.v:L65-L68](../../rtl/core/flush_ctrl.v#L65-L68)
+
 ```verilog
 output reg                preload_req_valid_o,
 output reg [VA_WIDTH-1:0] preload_addr_o,
@@ -207,6 +237,8 @@ This is only a request/ready control model. It does not model a complete page-ta
 ## Status output interface
 
 The status output side is:
+
+Source: [rtl/core/flush_ctrl.v:L70-L74](../../rtl/core/flush_ctrl.v#L70-L74)
 
 ```verilog
 output reg                  status_valid_o,
@@ -232,6 +264,8 @@ output reg [STATUS_WIDTH-1:0] status_bits_o
 
 The state machine has three states:
 
+Source: [rtl/core/flush_ctrl.v:L77-L79](../../rtl/core/flush_ctrl.v#L77-L79)
+
 ```verilog
 localparam [1:0] ST_IDLE         = 2'd0;
 localparam [1:0] ST_WAIT_PROBE   = 2'd1;
@@ -239,6 +273,8 @@ localparam [1:0] ST_WAIT_PRELOAD = 2'd2;
 ```
 
 The current state is stored in:
+
+Source: [rtl/core/flush_ctrl.v:L83](../../rtl/core/flush_ctrl.v#L83)
 
 ```verilog
 reg [1:0] state_q;
@@ -251,6 +287,8 @@ The states mean:
 - `ST_WAIT_PRELOAD`: waiting for `preload_req_ready_i`.
 
 There is also one saved operand register:
+
+Source: [rtl/core/flush_ctrl.v:L84](../../rtl/core/flush_ctrl.v#L84)
 
 ```verilog
 reg [VA_WIDTH-1:0] probe_addr_q;
@@ -266,11 +304,15 @@ On reset, the module does three important things.
 
 First, it returns the state machine to idle:
 
+Source: [rtl/core/flush_ctrl.v:L165](../../rtl/core/flush_ctrl.v#L165)
+
 ```verilog
 state_q <= ST_IDLE;
 ```
 
 Second, it clears saved operands and command outputs:
+
+Source: [rtl/core/flush_ctrl.v:L166-L170](../../rtl/core/flush_ctrl.v#L166-L170)
 
 ```verilog
 probe_addr_q <= {VA_WIDTH{1'b0}};
@@ -279,6 +321,8 @@ flush_fc_o   <= {FC_WIDTH{1'b0}};
 ```
 
 Third, it clears every pulse, request, and status output:
+
+Source: [rtl/core/flush_ctrl.v:L167-L181](../../rtl/core/flush_ctrl.v#L167-L181)
 
 ```verilog
 flush_all_o         <= 1'b0;
@@ -296,6 +340,8 @@ This makes the reset state deterministic and prevents stale control pulses or st
 
 In the non-reset path, several pulse-like outputs are cleared at the start of every clock cycle:
 
+Source: [rtl/core/flush_ctrl.v:L183-L186](../../rtl/core/flush_ctrl.v#L183-L186)
+
 ```verilog
 flush_all_o       <= 1'b0;
 flush_match_o     <= 1'b0;
@@ -312,6 +358,8 @@ Notice that `preload_req_valid_o` is not cleared in this default group. That is 
 ## Flush-all command
 
 In `ST_IDLE`, when `cmd_valid_i` is true and `cmd_op_i` is `CMD_FLUSH_ALL`, the module does this:
+
+Source: [rtl/core/flush_ctrl.v:L192-L198](../../rtl/core/flush_ctrl.v#L192-L198)
 
 ```verilog
 flush_all_o    <= 1'b1;
@@ -332,6 +380,8 @@ The state stays idle because there is no multi-cycle response to wait for.
 
 For `CMD_FLUSH_MATCH`, the module emits a targeted flush pulse:
 
+Source: [rtl/core/flush_ctrl.v:L201-L206](../../rtl/core/flush_ctrl.v#L201-L206)
+
 ```verilog
 flush_match_o  <= 1'b1;
 flush_addr_o   <= cmd_addr_i;
@@ -349,6 +399,8 @@ Like `CMD_FLUSH_ALL`, this command completes immediately from the state machine'
 ## Probe command
 
 For `CMD_PROBE`, the module starts a probe request:
+
+Source: [rtl/core/flush_ctrl.v:L212-L217](../../rtl/core/flush_ctrl.v#L212-L217)
 
 ```verilog
 probe_req_valid_o <= 1'b1;
@@ -370,11 +422,15 @@ After launching the request, the state machine moves to `ST_WAIT_PROBE`. While i
 
 In `ST_WAIT_PROBE`, the module waits for:
 
+Source: [rtl/core/flush_ctrl.v:L238-L239](../../rtl/core/flush_ctrl.v#L238-L239)
+
 ```verilog
 probe_resp_valid_i
 ```
 
 When the response arrives, it returns to idle and emits a status record:
+
+Source: [rtl/core/flush_ctrl.v:L240-L246](../../rtl/core/flush_ctrl.v#L240-L246)
 
 ```verilog
 state_q        <= ST_IDLE;
@@ -400,6 +456,8 @@ For a miss, this shim does not force extra class bits. It reports the normalized
 
 For `CMD_PRELOAD`, the module starts a preload request:
 
+Source: [rtl/core/flush_ctrl.v:L220-L224](../../rtl/core/flush_ctrl.v#L220-L224)
+
 ```verilog
 preload_req_valid_o <= 1'b1;
 preload_addr_o      <= cmd_addr_i;
@@ -417,11 +475,15 @@ That gives the downstream preload logic a level-style valid signal that stays hi
 
 In `ST_WAIT_PRELOAD`, the module watches:
 
+Source: [rtl/core/flush_ctrl.v:L250-L251](../../rtl/core/flush_ctrl.v#L250-L251)
+
 ```verilog
 preload_req_ready_i
 ```
 
 When ready is true, the module completes the request:
+
+Source: [rtl/core/flush_ctrl.v:L252-L258](../../rtl/core/flush_ctrl.v#L252-L258)
 
 ```verilog
 preload_req_valid_o <= 1'b0;
@@ -441,6 +503,8 @@ This status means the preload request handshake completed. It does not mean a fu
 
 If `cmd_op_i` does not match one of the implemented commands, the default branch emits a `CMD_NOP` status:
 
+Source: [rtl/core/flush_ctrl.v:L227-L232](../../rtl/core/flush_ctrl.v#L227-L232)
+
 ```verilog
 status_valid_o <= 1'b1;
 status_cmd_o   <= CMD_NOP;
@@ -452,6 +516,8 @@ status_bits_o  <= {STATUS_WIDTH{1'b0}};
 This gives the caller a visible completion indication even for an unrecognized command encoding.
 
 There is also a default state-machine branch:
+
+Source: [rtl/core/flush_ctrl.v:L262-L264](../../rtl/core/flush_ctrl.v#L262-L264)
 
 ```verilog
 default: begin
@@ -467,6 +533,8 @@ That branch recovers to idle if the state register ever holds an unexpected valu
 ## TT/TTR status bits
 
 The module defines two status bit positions:
+
+Source: [rtl/core/flush_ctrl.v:L80-L81](../../rtl/core/flush_ctrl.v#L80-L81)
 
 ```verilog
 localparam integer STATUS_BIT_TT_MATCH   = STATUS_WIDTH - 1;
@@ -485,6 +553,8 @@ This is a local first-pass status convention used by this shim. It should not be
 
 The `va_to_status_pa` function resizes a virtual address into a physical-address-width value:
 
+Source: [rtl/core/flush_ctrl.v:L86-L88](../../rtl/core/flush_ctrl.v#L86-L88)
+
 ```verilog
 function automatic [PA_WIDTH-1:0] va_to_status_pa(
   input [VA_WIDTH-1:0] va_i
@@ -493,11 +563,15 @@ function automatic [PA_WIDTH-1:0] va_to_status_pa(
 
 It starts by clearing the output:
 
+Source: [rtl/core/flush_ctrl.v:L91](../../rtl/core/flush_ctrl.v#L91)
+
 ```verilog
 va_to_status_pa = {PA_WIDTH{1'b0}};
 ```
 
 Then it copies address bits one at a time while the destination index is still inside the virtual-address width:
+
+Source: [rtl/core/flush_ctrl.v:L92-L96](../../rtl/core/flush_ctrl.v#L92-L96)
 
 ```verilog
 for (idx = 0; idx < PA_WIDTH; idx = idx + 1) begin
@@ -517,6 +591,8 @@ This function is used when a probe response says the address matched transparent
 
 The `is_tt_match_status` function reads the transparent-translation match bit from a status value:
 
+Source: [rtl/core/flush_ctrl.v:L100-L102](../../rtl/core/flush_ctrl.v#L100-L102)
+
 ```verilog
 function automatic is_tt_match_status(
   input [STATUS_WIDTH-1:0] status_i
@@ -524,6 +600,8 @@ function automatic is_tt_match_status(
 ```
 
 The key line is:
+
+Source: [rtl/core/flush_ctrl.v:L105](../../rtl/core/flush_ctrl.v#L105)
 
 ```verilog
 is_tt_match_status = status_i[STATUS_BIT_TT_MATCH];
@@ -539,6 +617,8 @@ The function includes a defensive branch for `STATUS_WIDTH >= 1`, but the `initi
 
 The `normalize_probe_status` function adjusts probe status bits before reporting them:
 
+Source: [rtl/core/flush_ctrl.v:L112-L115](../../rtl/core/flush_ctrl.v#L112-L115)
+
 ```verilog
 function automatic [STATUS_WIDTH-1:0] normalize_probe_status(
   input                    resp_hit_i,
@@ -548,11 +628,15 @@ function automatic [STATUS_WIDTH-1:0] normalize_probe_status(
 
 It starts with the response status as the default:
 
+Source: [rtl/core/flush_ctrl.v:L118](../../rtl/core/flush_ctrl.v#L118)
+
 ```verilog
 status_v = resp_status_i;
 ```
 
 Then it applies this rule:
+
+Source: [rtl/core/flush_ctrl.v:L120-L124](../../rtl/core/flush_ctrl.v#L120-L124)
 
 ```verilog
 if (is_tt_match_status(resp_status_i)) begin
@@ -572,6 +656,8 @@ This keeps the two status classes distinct in the first-pass status result.
 
 The `probe_status_hit` function computes the `status_hit_o` value for probe results:
 
+Source: [rtl/core/flush_ctrl.v:L130-L135](../../rtl/core/flush_ctrl.v#L130-L135)
+
 ```verilog
 probe_status_hit = resp_hit_i | is_tt_match_status(resp_status_i);
 ```
@@ -588,6 +674,8 @@ This matches the header comment: both translated results and transparent bypasse
 ## Initial validation checks
 
 The `initial begin` block contains simulation/elaboration checks for invalid parameter combinations:
+
+Source: [rtl/core/flush_ctrl.v:L142-L160](../../rtl/core/flush_ctrl.v#L142-L160)
 
 ```verilog
 initial begin

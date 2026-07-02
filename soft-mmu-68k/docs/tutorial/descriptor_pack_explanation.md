@@ -15,6 +15,8 @@ The module supports three descriptor kinds:
 
 The selected kind is controlled by:
 
+Source: [rtl/core/descriptor_pack.v:L86](../../rtl/core/descriptor_pack.v#L86)
+
 ```verilog
 input wire [1:0] kind_i
 ```
@@ -26,6 +28,8 @@ When packing, `kind_i` decides whether the module builds a root descriptor, poin
 ## It is purely combinational logic
 
 The file has no clock, reset, or stored state. Both main logic blocks are written as:
+
+Source: [rtl/core/descriptor_pack.v:L193](../../rtl/core/descriptor_pack.v#L193) and [rtl/core/descriptor_pack.v:L233](../../rtl/core/descriptor_pack.v#L233)
 
 ```verilog
 always @* begin
@@ -44,6 +48,8 @@ There are two separate combinational blocks:
 
 At the top:
 
+Source: [rtl/core/descriptor_pack.v:L1-L2](../../rtl/core/descriptor_pack.v#L1-L2)
+
 ```verilog
 `timescale 1ns/1ps
 `default_nettype none
@@ -54,6 +60,8 @@ At the top:
 `default_nettype none` is a safety directive. It prevents Verilog from silently creating undeclared wires because of typos. This is good practice in RTL because a misspelled signal name should cause an error, not become an accidental new net.
 
 At the bottom:
+
+Source: [rtl/core/descriptor_pack.v:L272](../../rtl/core/descriptor_pack.v#L272)
 
 ```verilog
 `default_nettype wire
@@ -67,6 +75,8 @@ This restores the default behavior for files compiled afterward.
 
 The module starts with many parameters:
 
+Source: [rtl/core/descriptor_pack.v:L33-L36](../../rtl/core/descriptor_pack.v#L33-L36)
+
 ```verilog
 parameter int DESCR_WIDTH = 64,
 parameter int PA_WIDTH    = 32,
@@ -77,6 +87,8 @@ parameter int PAGE_SHIFT  = 12,
 These make the module configurable. For example, `DESCR_WIDTH` controls the packed descriptor width, and `PA_WIDTH` controls physical address width.
 
 The file also defines bit locations using parameters such as:
+
+Source: [rtl/core/descriptor_pack.v:L47-L52](../../rtl/core/descriptor_pack.v#L47-L52)
 
 ```verilog
 parameter int R_DT_HI    = 33,
@@ -98,6 +110,8 @@ The module has inputs for three descriptor types.
 
 Root descriptor inputs include:
 
+Source: [rtl/core/descriptor_pack.v:L91-L97](../../rtl/core/descriptor_pack.v#L91-L97)
+
 ```verilog
 r_v_i
 r_i_i
@@ -108,6 +122,8 @@ r_addr_i
 
 Pointer descriptor inputs include:
 
+Source: [rtl/core/descriptor_pack.v:L102-L108](../../rtl/core/descriptor_pack.v#L102-L108)
+
 ```verilog
 p_v_i
 p_i_i
@@ -117,6 +133,8 @@ p_addr_i
 ```
 
 Page descriptor inputs include:
+
+Source: [rtl/core/descriptor_pack.v:L113-L121](../../rtl/core/descriptor_pack.v#L113-L121)
 
 ```verilog
 pg_v_i
@@ -131,11 +149,15 @@ pg_pa_i
 
 The packed descriptor output is:
 
+Source: [rtl/core/descriptor_pack.v:L127](../../rtl/core/descriptor_pack.v#L127)
+
 ```verilog
 output reg [DESCR_WIDTH-1:0] packed_o
 ```
 
 The unpack side takes:
+
+Source: [rtl/core/descriptor_pack.v:L132](../../rtl/core/descriptor_pack.v#L132)
 
 ```verilog
 input wire [DESCR_WIDTH-1:0] packed_i
@@ -153,6 +175,8 @@ The comments explain an important compatibility detail: the valid signals are no
 
 Instead:
 
+Source: [rtl/core/descriptor_pack.v:L177-L179](../../rtl/core/descriptor_pack.v#L177-L179)
+
 ```verilog
 wire [1:0] r_dt_enc  = r_v_i  ? r_dt_i  : 2'b00;
 wire [1:0] p_dt_enc  = p_v_i  ? p_dt_i  : 2'b00;
@@ -165,6 +189,8 @@ This means:
 - if `*_v_i` is false, descriptor type is forced to `2'b00`
 
 On unpack, validity is reconstructed like this:
+
+Source: [rtl/core/descriptor_pack.v:L236](../../rtl/core/descriptor_pack.v#L236)
 
 ```verilog
 r_v_o = (packed_i[R_DT_HI:R_DT_LO] != 2'b00);
@@ -180,6 +206,8 @@ The first `always @*` block creates `packed_o`.
 
 It starts by clearing the whole descriptor:
 
+Source: [rtl/core/descriptor_pack.v:L194](../../rtl/core/descriptor_pack.v#L194)
+
 ```verilog
 packed_o = {DESCR_WIDTH{1'b0}};
 ```
@@ -187,6 +215,8 @@ packed_o = {DESCR_WIDTH{1'b0}};
 This is important because it gives every bit a known default value and avoids accidental latch inference.
 
 Then it uses a `case` statement:
+
+Source: [rtl/core/descriptor_pack.v:L196-L229](../../rtl/core/descriptor_pack.v#L196-L229)
 
 ```verilog
 case (kind_i)
@@ -210,6 +240,8 @@ endcase
 
 For a root descriptor, it places fields into their defined bit positions:
 
+Source: [rtl/core/descriptor_pack.v:L198-L200](../../rtl/core/descriptor_pack.v#L198-L200)
+
 ```verilog
 packed_o[R_I_BIT] = r_i_i;
 packed_o[R_LIMIT_HI -: LIMIT_WIDTH] = r_limit_i;
@@ -217,6 +249,8 @@ packed_o[R_DT_HI:R_DT_LO] = r_dt_enc;
 ```
 
 The syntax:
+
+Source: [rtl/core/descriptor_pack.v:L199](../../rtl/core/descriptor_pack.v#L199)
 
 ```verilog
 [R_LIMIT_HI -: LIMIT_WIDTH]
@@ -228,12 +262,16 @@ So if `R_LIMIT_HI = 62` and `LIMIT_WIDTH = 15`, this selects bits `[62:48]`.
 
 For addresses, the module copies only the relevant aligned address bits:
 
+Source: [rtl/core/descriptor_pack.v:L202](../../rtl/core/descriptor_pack.v#L202)
+
 ```verilog
 packed_o[R_ADDR_LO +: ROOT_ADDR_COPY_W] =
     r_addr_i[ROOT_ADDR_SRC_LO +: ROOT_ADDR_COPY_W];
 ```
 
 The syntax:
+
+Source: [rtl/core/descriptor_pack.v:L202](../../rtl/core/descriptor_pack.v#L202)
 
 ```verilog
 [start +: width]
@@ -251,6 +289,8 @@ The second `always @*` block decodes `packed_i`.
 
 For root descriptors:
 
+Source: [rtl/core/descriptor_pack.v:L235-L238](../../rtl/core/descriptor_pack.v#L235-L238)
+
 ```verilog
 r_dt_o    = packed_i[R_DT_HI:R_DT_LO];
 r_v_o     = (packed_i[R_DT_HI:R_DT_LO] != 2'b00);
@@ -260,6 +300,8 @@ r_limit_o = packed_i[R_LIMIT_HI -: LIMIT_WIDTH];
 
 Then it clears the output address:
 
+Source: [rtl/core/descriptor_pack.v:L239](../../rtl/core/descriptor_pack.v#L239)
+
 ```verilog
 r_addr_o = {PA_WIDTH{1'b0}};
 ```
@@ -267,6 +309,8 @@ r_addr_o = {PA_WIDTH{1'b0}};
 and copies the stored address bits back into the correct address position.
 
 The page descriptor unpacking also forces low address bits to zero:
+
+Source: [rtl/core/descriptor_pack.v:L267](../../rtl/core/descriptor_pack.v#L267)
 
 ```verilog
 pg_pa_o[PAGE_SHIFT-1:0] = {PAGE_SHIFT{1'b0}};
@@ -279,6 +323,8 @@ That reflects page alignment. For a `PAGE_SHIFT` of 12, the lower 12 bits are ze
 ## Local parameters
 
 The module computes several helper constants:
+
+Source: [rtl/core/descriptor_pack.v:L159-L174](../../rtl/core/descriptor_pack.v#L159-L174)
 
 ```verilog
 localparam int ROOT_ADDR_WIDTH = ...
@@ -294,6 +340,8 @@ This prevents the code from blindly copying more bits than exist in either the s
 ## Initial validation checks
 
 The `initial begin` block contains simulation-time checks:
+
+Source: [rtl/core/descriptor_pack.v:L181-L190](../../rtl/core/descriptor_pack.v#L181-L190)
 
 ```verilog
 initial begin
@@ -315,6 +363,8 @@ These checks are for simulation/elaboration safety. They are not ordinary runtim
 ## Verilator lint comments
 
 The file contains comments like:
+
+Source: [rtl/core/descriptor_pack.v:L95-L98](../../rtl/core/descriptor_pack.v#L95-L98)
 
 ```verilog
 /* verilator lint_off UNUSED */
