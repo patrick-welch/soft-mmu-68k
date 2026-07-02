@@ -12,6 +12,7 @@ identity.
 - `design/`: design decisions, implementation notes, and compatibility gaps
 - `process/`: development and review workflow notes
 - `roadmap/`: future opportunities and non-goal tracking
+- `tutorial/`: guided source-level explanations of the current core RTL modules
 - `wiki/`: GitHub Wiki source pages
 
 ## Citation and reference rules
