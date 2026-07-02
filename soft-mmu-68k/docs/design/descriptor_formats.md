@@ -103,6 +103,8 @@
 - If external users depend on 32-bit packed descriptors, add an explicit
   compatibility mode rather than relying on the older placeholder layout.
 
+*Manual refs used:* [^68851-UM-5.1.5.2.1] [^68851-UM-5.1.5.3] [^68851-UM-6.1.1] [^68030-UM-9.5.1.2] [^68030-UM-9.5.1.3] [^68030-UM-9.5.1.7] [^68030-UM-9.7]
+
 [^68851-UM-5.1.5.2.1]: Motorola MC68851 PMMU User's Manual, Section 5.1.5.2.1 "Table Descriptors".
 [^68851-UM-5.1.5.3]: Motorola MC68851 PMMU User's Manual, Section 5.1.5.3 "Descriptor Field Definitions".
 [^68851-UM-6.1.1]: Motorola MC68851 PMMU User's Manual, Section 6.1.1 "Root Pointer".
