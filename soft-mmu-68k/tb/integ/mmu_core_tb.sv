@@ -57,10 +57,16 @@ module mmu_core_tb;
   localparam logic [VA_WIDTH-1:0] VA_FAULT = 16'h4234;
   localparam logic [VA_WIDTH-1:0] VA_INVALID = 16'h0234;
   localparam logic [VA_WIDTH-1:0] VA_UNMAPPED = 16'h0334;
+  localparam logic [VA_WIDTH-1:0] VA_CRP_ALT = 16'h0434;
+  localparam logic [VA_WIDTH-1:0] VA_TC_IN_RANGE = 16'h0534;
+  localparam logic [VA_WIDTH-1:0] VA_TC_OUT_OF_RANGE = 16'h0634;
+  localparam logic [VA_WIDTH-1:0] VA_SRP_INERT = 16'h0734;
   localparam logic [FC_WIDTH-1:0] FC_USER_DATA = 3'b001;
   localparam logic [FC_WIDTH-1:0] FC_SUPER_DATA = 3'b101;
   localparam logic [FC_WIDTH-1:0] FC_CPU_SPACE = 3'b111;
   localparam logic [PA_WIDTH-1:0] TABLE_BASE = 16'h0200;
+  localparam logic [PA_WIDTH-1:0] ALT_TABLE_BASE = 16'h0600;
+  localparam logic [PA_WIDTH-1:0] ALT_SRP_BASE = 16'h0A00;
 
   logic                    clk;
   logic                    rst_n;
@@ -106,8 +112,12 @@ module mmu_core_tb;
 
   logic [DESCR_WIDTH-1:0]  mem_desc [0:(1<<VPN_WIDTH)-1];
   logic                    mem_err  [0:(1<<VPN_WIDTH)-1];
+  logic [PA_WIDTH-1:0]     expected_table_base;
   logic [PA_WIDTH-1:0]     mem_req_offset;
   logic [VPN_WIDTH-1:0]    mem_word_index;
+  logic [PA_WIDTH-1:0]     last_walk_req_addr;
+  integer                  walk_req_count;
+  integer                  walk_req_count_before;
   /* verilator lint_off UNUSED */
   wire                     unused_tb = (^reg_rd_data) ^ cmd_busy ^ (^status_bits) ^ (^mem_req_offset);
   /* verilator lint_on UNUSED */
@@ -177,7 +187,17 @@ module mmu_core_tb;
   always #5 clk = ~clk;
   /* verilator lint_on STMTDLY */
 
-  assign mem_req_offset     = walk_mem_req_addr - TABLE_BASE;
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      walk_req_count     <= 0;
+      last_walk_req_addr <= '0;
+    end else if (walk_mem_req_valid) begin
+      walk_req_count     <= walk_req_count + 1;
+      last_walk_req_addr <= walk_mem_req_addr;
+    end
+  end
+
+  assign mem_req_offset     = walk_mem_req_addr - expected_table_base;
   assign mem_word_index     = mem_req_offset[VPN_WIDTH+DESCR_SHIFT-1:DESCR_SHIFT];
   assign walk_mem_resp_valid = walk_mem_req_valid;
   assign walk_mem_resp_data  = mem_desc[mem_word_index];
@@ -229,6 +249,15 @@ module mmu_core_tb;
     end
   endfunction
 
+  function automatic [PA_WIDTH-1:0] expected_desc_addr(
+    input logic [PA_WIDTH-1:0] base_i,
+    input logic [VPN_WIDTH-1:0] vpn_i
+  );
+    begin
+      expected_desc_addr = base_i + ({{(PA_WIDTH-VPN_WIDTH){1'b0}}, vpn_i} << DESCR_SHIFT);
+    end
+  endfunction
+
   task automatic clear_inputs;
     begin
       req_valid   = 1'b0;
@@ -244,6 +273,7 @@ module mmu_core_tb;
       cmd_op      = TB_CMD_NOP;
       cmd_addr    = '0;
       cmd_fc      = '0;
+      expected_table_base = TABLE_BASE;
     end
   endtask
 
@@ -368,6 +398,10 @@ module mmu_core_tb;
     mem_desc[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_INVALID, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'hD4);
     mem_desc[VA_INVALID[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_INVALID, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h02);
     mem_desc[VA_UNMAPPED[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PTR, 1'b0, 1'b0, 1'b0, 1'b0, 1'b0, 8'h03);
+    mem_desc[VA_CRP_ALT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'h94);
+    mem_desc[VA_TC_IN_RANGE[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 8'h95);
+    mem_desc[VA_TC_OUT_OF_RANGE[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'h96);
+    mem_desc[VA_SRP_INERT[VA_WIDTH-1:PAGE_SHIFT]] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'h97);
     mem_err[VA_FAULT[VA_WIDTH-1:PAGE_SHIFT]] = 1'b1;
 
     /* verilator lint_off STMTDLY */
@@ -382,6 +416,54 @@ module mmu_core_tb;
     reg_write(4'h2, 32'h0000_0080);
     reg_write(4'h3, 32'h0000_0000);
     reg_write(4'h4, 32'h0000_0000);
+
+    expected_table_base = ALT_TABLE_BASE;
+    reg_write(4'h0, {16'h0000, ALT_TABLE_BASE});
+    walk_req_count_before = walk_req_count;
+    cpu_request(VA_CRP_ALT, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_NOT_EQUAL("CRP write changes descriptor request base", expected_desc_addr(ALT_TABLE_BASE, VA_CRP_ALT[VA_WIDTH-1:PAGE_SHIFT]), last_walk_req_addr)
+    `TB_FATAL_IF_NOT_EQUAL("CRP write issues one descriptor request", walk_req_count_before + 1, walk_req_count)
+    `TB_FATAL_IF_TRUE("CRP-derived walk first access is not a translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("CRP-derived walk succeeds", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("CRP-derived walker PA", 16'h9434, resp_pa)
+
+    expected_table_base = TABLE_BASE;
+    reg_write(4'h0, {16'h0000, TABLE_BASE});
+    reg_write(4'h2, 32'h0000_0006);
+    walk_req_count_before = walk_req_count;
+    cpu_request(VA_TC_IN_RANGE, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_NOT_EQUAL("TC span in-range descriptor request address", expected_desc_addr(TABLE_BASE, VA_TC_IN_RANGE[VA_WIDTH-1:PAGE_SHIFT]), last_walk_req_addr)
+    `TB_FATAL_IF_NOT_EQUAL("TC span in-range issues one descriptor request", walk_req_count_before + 1, walk_req_count)
+    `TB_FATAL_IF_TRUE("TC span in-range first access is not a translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("TC span in-range translates", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("TC span in-range PA", 16'h9534, resp_pa)
+
+    walk_req_count_before = walk_req_count;
+    cpu_request(VA_TC_OUT_OF_RANGE, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_FALSE("TC span first out-of-range reports fault", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("TC span first out-of-range fault code", TB_RESP_FAULT_UNMAPPED, resp_fault_code)
+    `TB_FATAL_IF_TRUE("TC span first out-of-range does not report hit", resp_hit)
+    `TB_FATAL_IF_NOT_EQUAL("TC span first out-of-range issues no descriptor request", walk_req_count_before, walk_req_count)
+
+    reg_write(4'h2, 32'h0000_0080);
+    reg_write(4'h1, {16'h0000, ALT_SRP_BASE});
+    walk_req_count_before = walk_req_count;
+    cpu_request(VA_SRP_INERT, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_NOT_EQUAL("SRP write does not change current user descriptor base", expected_desc_addr(TABLE_BASE, VA_SRP_INERT[VA_WIDTH-1:PAGE_SHIFT]), last_walk_req_addr)
+    `TB_FATAL_IF_NOT_EQUAL("SRP-inert user walk issues one descriptor request", walk_req_count_before + 1, walk_req_count)
+    `TB_FATAL_IF_TRUE("SRP-inert user walk is not a translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("SRP-inert user walk translates", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("SRP-inert user walker PA", 16'h9734, resp_pa)
+
+    reg_write(4'h1, 32'h0000_0000);
+    command_issue(TB_CMD_FLUSH_ALL, '0, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("TC1B setup flush-all status command", TB_CMD_FLUSH_ALL, status_cmd)
+    wait_until_idle();
 
     // Preload path followed by probe and a CPU-side TLB hit.
     command_issue(TB_CMD_PRELOAD, VA_HIT, FC_USER_DATA);

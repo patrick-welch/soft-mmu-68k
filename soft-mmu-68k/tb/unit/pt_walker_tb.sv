@@ -54,6 +54,8 @@ module pt_walker_tb;
   logic [VPN_WIDTH-1:0]   mem_word_index;
   logic                   mem_req_offset_aligned;
   logic                   mem_req_offset_upper_zero;
+  integer                 mem_req_count;
+  integer                 mem_req_count_before;
 
   pt_walker #(
     .VA_WIDTH    (VA_WIDTH),
@@ -90,6 +92,14 @@ module pt_walker_tb;
   /* verilator lint_off STMTDLY */
   always #5 clk = ~clk;
   /* verilator lint_on STMTDLY */
+
+  always @(posedge clk) begin
+    if (!rst_n) begin
+      mem_req_count <= 0;
+    end else if (mem_req_valid) begin
+      mem_req_count <= mem_req_count + 1;
+    end
+  end
 
   assign mem_req_offset = mem_req_addr - table_base;
   assign mem_word_index = mem_req_offset[VPN_WIDTH+DESCR_BYTE_SHIFT-1:DESCR_BYTE_SHIFT];
@@ -147,8 +157,18 @@ module pt_walker_tb;
     input logic [VPN_WIDTH-1:0] entries_i
   );
     begin
+      drive_walk_at_base(va_i, entries_i, 16'h0200);
+    end
+  endtask
+
+  task automatic drive_walk_at_base(
+    input logic [VA_WIDTH-1:0]  va_i,
+    input logic [VPN_WIDTH-1:0] entries_i,
+    input logic [PA_WIDTH-1:0]  table_base_i
+  );
+    begin
       va            = va_i;
-      table_base    = 16'h0200;
+      table_base    = table_base_i;
       table_entries = entries_i;
       fc            = 3'b101;
       start         = 1'b0;
@@ -218,6 +238,19 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_success(16'h1234, 8'hA5, 5'b10101);
 
+    mem_desc[8'h14] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b1, 1'b1, 1'b0, 1'b1, 8'hA4);
+    drive_walk_at_base(16'h1434, 8'h40, 16'h0600);
+    start = 1'b1;
+    /* verilator lint_off STMTDLY */
+    #10;
+    start = 1'b0;
+    #10;
+    /* verilator lint_on STMTDLY */
+    expect_success(16'h1434, 8'hA4, 5'b01101);
+    assert(mem_req_addr === (16'h0600 + (16'h0014 << DESCR_BYTE_SHIFT)))
+      else $fatal(1, "alternate table base descriptor address mismatch exp=%h got=%h",
+                  (16'h0600 + (16'h0014 << DESCR_BYTE_SHIFT)), mem_req_addr);
+
     mem_desc[8'h00] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b1, 1'b0, 8'h80);
     drive_walk(16'h0000, 8'h01);
     start = 1'b1;
@@ -239,6 +272,20 @@ module pt_walker_tb;
     /* verilator lint_on STMTDLY */
     expect_success(16'h3FFF, 8'h8F, 5'b01001);
     assert(mem_word_index === 8'h3F) else $fatal(1, "highest valid VA must read last in-range descriptor index");
+
+    mem_req_count_before = mem_req_count;
+    mem_desc[8'h40] = make_page_desc(DESC_DT_PAGE, 1'b0, 1'b0, 1'b0, 1'b0, 1'b1, 8'h90);
+    drive_walk(16'h4000, 8'h40);
+    start = 1'b1;
+    /* verilator lint_off STMTDLY */
+    #10;
+    start = 1'b0;
+    #1;
+    /* verilator lint_on STMTDLY */
+    expect_fault(FAULT_UNMAPPED);
+    assert(mem_req_count === mem_req_count_before)
+      else $fatal(1, "first out-of-range VPN must not issue descriptor request count_before=%0d count_after=%0d",
+                  mem_req_count_before, mem_req_count);
 
     mem_desc[8'h22] = make_page_desc(DESC_DT_INVALID, 1'b1, 1'b1, 1'b1, 1'b1, 1'b1, 8'h22);
     drive_walk(16'h2234, 8'h40);
