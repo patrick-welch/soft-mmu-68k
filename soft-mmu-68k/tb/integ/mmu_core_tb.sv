@@ -546,17 +546,69 @@ module mmu_core_tb;
     `TB_FATAL_IF_TRUE("post-refill probe does not set TT class bit", status_bits[STATUS_BIT_TT_MATCH])
     `TB_FATAL_IF_NOT_EQUAL("post-refill probe attrs", 5'b00011, status_bits[4:0])
 
-    command_issue(TB_CMD_FLUSH_MATCH, VA_MISS, FC_USER_DATA);
+    // Flush-all invalidates the translated/TLB-backed entry and reports minimal status.
+    command_issue(TB_CMD_FLUSH_ALL, '0, FC_USER_DATA);
     wait_for_status();
-    `TB_FATAL_IF_NOT_EQUAL("post-refill flush-match command", TB_CMD_FLUSH_MATCH, status_cmd)
+    `TB_FATAL_IF_NOT_EQUAL("flush-all invalidation status command", TB_CMD_FLUSH_ALL, status_cmd)
+    `TB_FATAL_IF_TRUE("flush-all invalidation status hit clear", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("flush-all invalidation status PA zero", {PA_WIDTH{1'b0}}, status_pa)
+    `TB_FATAL_IF_NOT_EQUAL("flush-all invalidation status bits zero", {STATUS_WIDTH{1'b0}}, status_bits)
+    wait_until_idle();
 
     command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
     wait_for_status();
-    `TB_FATAL_IF_NOT_EQUAL("post-refill flushed probe command", TB_CMD_PROBE, status_cmd)
-    `TB_FATAL_IF_TRUE("probe misses after flushing refill", status_hit)
-    `TB_FATAL_IF_TRUE("flushed probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
-    `TB_FATAL_IF_TRUE("flushed probe clears TT class bit", status_bits[STATUS_BIT_TT_MATCH])
-    `TB_FATAL_IF_NOT_EQUAL("flushed probe miss status bits", {STATUS_WIDTH{1'b0}}, status_bits)
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_TRUE("probe misses after flush-all", status_hit)
+    `TB_FATAL_IF_TRUE("post-flush-all probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("post-flush-all probe clears TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all probe miss status bits", {STATUS_WIDTH{1'b0}}, status_bits)
+
+    cpu_request(VA_MISS, FC_USER_DATA, 1'b1, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_TRUE("post-flush-all refill first access is not a translated hit", resp_hit)
+    `TB_FATAL_IF_TRUE("post-flush-all refill succeeds", resp_fault)
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all refill PA", 16'hB234, resp_pa)
+
+    command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all refill probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("post-flush-all refill probe reports translated hit", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all refill probe PA", 16'hB234, status_pa)
+    `TB_FATAL_IF_FALSE("post-flush-all refill probe sets translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("post-flush-all refill probe does not set TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_NOT_EQUAL("post-flush-all refill probe attrs", 5'b00011, status_bits[4:0])
+
+    // Targeted flush is scoped by both address and Function Code.
+    command_issue(TB_CMD_FLUSH_MATCH, VA_MISS, FC_SUPER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flush-match status command", TB_CMD_FLUSH_MATCH, status_cmd)
+    `TB_FATAL_IF_TRUE("wrong-FC flush-match status hit clear", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flush-match status PA zero", {PA_WIDTH{1'b0}}, status_pa)
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flush-match status bits zero", {STATUS_WIDTH{1'b0}}, status_bits)
+
+    command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flushed probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_FALSE("wrong-FC flush preserves user-data translated hit", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flush preserved probe PA", 16'hB234, status_pa)
+    `TB_FATAL_IF_FALSE("wrong-FC flush preserved translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("wrong-FC flush preserved TT class clear", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_NOT_EQUAL("wrong-FC flush preserved attrs", 5'b00011, status_bits[4:0])
+
+    command_issue(TB_CMD_FLUSH_MATCH, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("matching flush-match status command", TB_CMD_FLUSH_MATCH, status_cmd)
+    `TB_FATAL_IF_TRUE("matching flush-match status hit clear", status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("matching flush-match status PA zero", {PA_WIDTH{1'b0}}, status_pa)
+    `TB_FATAL_IF_NOT_EQUAL("matching flush-match status bits zero", {STATUS_WIDTH{1'b0}}, status_bits)
+
+    command_issue(TB_CMD_PROBE, VA_MISS, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("matching-flushed probe command", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_TRUE("probe misses after matching flush", status_hit)
+    `TB_FATAL_IF_TRUE("matching-flushed probe clears translated class bit", status_bits[STATUS_BIT_TRANSLATED])
+    `TB_FATAL_IF_TRUE("matching-flushed probe clears TT class bit", status_bits[STATUS_BIT_TT_MATCH])
+    `TB_FATAL_IF_NOT_EQUAL("matching-flushed probe miss status bits", {STATUS_WIDTH{1'b0}}, status_bits)
 
     // User access to a supervisor-only mapping must fault.
     cpu_request(VA_PERM, FC_USER_DATA, 1'b1, 1'b0);
