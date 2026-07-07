@@ -173,6 +173,19 @@ module instr_shim_tb;
     /* verilator lint_on STMTDLY */
     expect_idle_outputs();
 
+    // Unsupported/default command encodings complete as safe NOP-class status.
+    launch_cmd(3'd7, 16'h5A5A, 3'b110);
+    assert(flush_all === 1'b0) else $fatal(1, "default command must not pulse whole flush");
+    assert(flush_match === 1'b0) else $fatal(1, "default command must not pulse targeted flush");
+    assert(probe_req_valid === 1'b0) else $fatal(1, "default command must not issue probe");
+    assert(preload_req_valid === 1'b0) else $fatal(1, "default command must not issue preload");
+    expect_status(CMD_NOP, 1'b0, {PA_WIDTH{1'b0}}, {STATUS_WIDTH{1'b0}}, "default command");
+    assert(cmd_ready === 1'b1) else $fatal(1, "default command must leave command port ready");
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    assert(status_valid === 1'b0) else $fatal(1, "default command status must be one cycle");
+
     // Whole-TLB flush command emits a one-cycle pulse and immediate status.
     launch_cmd(CMD_FLUSH_ALL, 16'h0000, 3'b000);
     assert(flush_all === 1'b1) else $fatal(1, "whole flush pulse missing");
@@ -209,6 +222,21 @@ module instr_shim_tb;
     #10;
     /* verilator lint_on STMTDLY */
     assert(probe_req_valid === 1'b0) else $fatal(1, "probe request pulse must clear");
+    cmd_valid = 1'b1;
+    cmd_op    = CMD_FLUSH_ALL;
+    cmd_addr  = 16'h1111;
+    cmd_fc    = 3'b001;
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    cmd_valid = 1'b0;
+    cmd_op    = CMD_NOP;
+    cmd_addr  = {VA_WIDTH{1'b0}};
+    cmd_fc    = {FC_WIDTH{1'b0}};
+    assert(busy === 1'b1) else $fatal(1, "probe overlap attempt must leave busy asserted");
+    assert(cmd_ready === 1'b0) else $fatal(1, "probe overlap attempt must leave cmd_ready low");
+    assert(flush_all === 1'b0) else $fatal(1, "probe overlap attempt must not pulse flush_all");
+    assert(status_valid === 1'b0) else $fatal(1, "probe overlap attempt must not produce status");
     probe_resp_hit    = 1'b1;
     probe_resp_pa     = 20'hA5_234;
     probe_resp_status = 8'h16;
@@ -244,6 +272,26 @@ module instr_shim_tb;
     assert(status_bits[STATUS_BIT_TT_MATCH] === 1'b1) else $fatal(1, "transparent probe must set TT match class bit");
     assert(status_bits[STATUS_BIT_TRANSLATED] === 1'b0) else $fatal(1, "transparent probe must not set translated class bit");
 
+    launch_cmd(CMD_PROBE, 16'hACE0, 3'b001);
+    assert(probe_req_valid === 1'b1) else $fatal(1, "TT-priority probe request pulse missing");
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_hit    = 1'b1;
+    probe_resp_pa     = 20'h4_3210;
+    probe_resp_status = 8'hC5;
+    probe_resp_valid  = 1'b1;
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    probe_resp_valid  = 1'b0;
+    probe_resp_hit    = 1'b0;
+    probe_resp_pa     = {PA_WIDTH{1'b0}};
+    probe_resp_status = {STATUS_WIDTH{1'b0}};
+    expect_status(CMD_PROBE, 1'b1, 20'h0ACE0, 8'h85, "probe TT class priority");
+    assert(status_bits[STATUS_BIT_TT_MATCH] === 1'b1) else $fatal(1, "TT-priority probe must keep TT match class bit");
+    assert(status_bits[STATUS_BIT_TRANSLATED] === 1'b0) else $fatal(1, "TT-priority probe must clear translated class bit");
+
     launch_cmd(CMD_PROBE, 16'h1357, 3'b101);
     assert(probe_req_valid === 1'b1) else $fatal(1, "probe miss request pulse missing");
     /* verilator lint_off STMTDLY */
@@ -270,8 +318,23 @@ module instr_shim_tb;
     assert(cmd_ready === 1'b0) else $fatal(1, "preload must deassert cmd_ready while busy");
     assert(status_valid === 1'b0) else $fatal(1, "preload status must wait for ready");
     /* verilator lint_off STMTDLY */
-    #20;
+    #10;
     /* verilator lint_on STMTDLY */
+    cmd_valid = 1'b1;
+    cmd_op    = CMD_FLUSH_MATCH;
+    cmd_addr  = 16'h2222;
+    cmd_fc    = 3'b010;
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    cmd_valid = 1'b0;
+    cmd_op    = CMD_NOP;
+    cmd_addr  = {VA_WIDTH{1'b0}};
+    cmd_fc    = {FC_WIDTH{1'b0}};
+    assert(busy === 1'b1) else $fatal(1, "preload overlap attempt must leave busy asserted");
+    assert(cmd_ready === 1'b0) else $fatal(1, "preload overlap attempt must leave cmd_ready low");
+    assert(flush_match === 1'b0) else $fatal(1, "preload overlap attempt must not pulse targeted flush");
+    assert(status_valid === 1'b0) else $fatal(1, "preload overlap attempt must not produce status");
     assert(preload_req_valid === 1'b1) else $fatal(1, "preload request must stay asserted until ready");
     preload_req_ready = 1'b1;
     /* verilator lint_off STMTDLY */
