@@ -19,6 +19,8 @@
 // treat them as "not a normal memory access" without adding a new interface pin.
 
 `timescale 1ns/1ps
+`default_nettype none
+
 module mmu_decode
 (
     input  wire [2:0] fc,          // Function code from core
@@ -44,3 +46,5 @@ module mmu_decode
     assign is_data    = fc_user_data | fc_super_data;
 
 endmodule
+
+`default_nettype wire
