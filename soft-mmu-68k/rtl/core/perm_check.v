@@ -27,6 +27,8 @@
 //     would allow the same access class.
 
 `timescale 1ns/1ps
+`default_nettype none
+
 module perm_check
 (
     input  wire       req_r,
@@ -87,3 +89,5 @@ module perm_check
                              : { bad_req, priv_rel, no_exec, wr_prot, no_read };
 
 endmodule
+
+`default_nettype wire

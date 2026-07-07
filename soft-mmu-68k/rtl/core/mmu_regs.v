@@ -13,6 +13,7 @@
 //------------------------------------------------------------------------------
 
 `timescale 1ns/1ps
+`default_nettype none
 
 module mmu_regs #(
     parameter VA_WIDTH = 32,     // Virtual address width
@@ -128,3 +129,5 @@ module mmu_regs #(
     end
 
 endmodule
+
+`default_nettype wire
