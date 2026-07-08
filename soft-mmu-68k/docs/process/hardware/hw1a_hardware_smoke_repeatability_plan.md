@@ -57,6 +57,101 @@ freeze exact LED, switch, UART, Vivado, or bitstream behavior.
 If the expected observable result is not confirmed before physical execution,
 `HW1B` must stop as blocked rather than improvise a new board behavior target.
 
+## Current Basys 3 Smoke Target For HW1B
+
+The current `HW1B` physical smoke target is the existing Basys 3 smoke demo
+documented in `soft-mmu-68k/README.md`. `HW1B` should treat that README section
+and the matching FPGA collateral in the commit under test as the source for the
+expected smoke procedure.
+
+Primary repository collateral:
+
+- `soft-mmu-68k/fpga/basys3/tops/top_mmu_demo.v`
+- `soft-mmu-68k/fpga/basys3/vivado/run_synth_impl.tcl`
+- `soft-mmu-68k/fpga/basys3/vivado/add_sources.tcl`
+- `soft-mmu-68k/fpga/basys3/xdc/Basys-3-Master.xdc`
+- `soft-mmu-68k/fpga/constraints/README.md`
+- `soft-mmu-68k/README.md`
+
+The root README currently documents that, on reset,
+`fpga/basys3/tops/top_mmu_demo.v` programs:
+
+- `CRP = 0x001000`
+- `TC = 0x00000FFF`
+- `TT0 = 0xF000F800`
+- `TT1 = 0x00000000`
+
+The root README currently documents four built-in descriptor responder cases:
+
+- page `0`: valid user-accessible translated page at PFN `0x040`
+- page `1`: valid supervisor-only translated page at PFN `0x041`
+- page `2`: invalid descriptor
+- page `3`: abstract bus-error response
+
+The expected Vivado and board-observation flow for `HW1B`, as documented in the
+root README, is:
+
+1. Open Vivado at the repository root.
+2. Run:
+
+```tcl
+cd fpga/basys3/vivado
+source run_synth_impl.tcl
+```
+
+3. Program the generated bitstream from
+   `fpga/basys3/vivado/build/basys3_mmu_demo/`.
+4. Press `btnC` after programming or after changing switches.
+5. Set switches, wait for the built-in rerun after the settle timer, then read
+   the LEDs.
+
+The front-panel controls documented for the current smoke demo are:
+
+- `btnC`: active-high reset
+- `sw[15]`: select TT-qualified region; `1` means VA high byte `0xF0`,
+  `0` means translated region `0x00`
+- `sw[14:13]`: mode
+  - `00`: access
+  - `01`: probe
+  - `10`: preload then access+probe
+  - `11`: targeted flush-match then access+probe
+- `sw[12]`: supervisor (`1`) vs user (`0`)
+- `sw[11]`: program/fetch (`1`) vs data (`0`)
+- `sw[10]`: write (`1`) vs read (`0`)
+- `sw[9:8]`: demo page selector
+- `sw[7:0]`: low VA offset bits
+
+The LED meanings documented for the current smoke demo are:
+
+- `led[0]`: MMU busy
+- `led[1]`: last access fault
+- `led[2]`: last translated hit flag
+- `led[3]`: last status/probe hit flag
+- `led[4]`: last translated-status class bit
+- `led[5]`: last TT-match status class bit
+- `led[8:6]`: last access fault code
+- `led[15:9]`: upper slice of the displayed PA/result
+
+The minimum `HW1B` smoke observations are:
+
+1. All switches low: translated access/probe smoke case.
+2. `SW15=1`: TT-qualified identity-style smoke case.
+3. `SW8=1`: user access to the supervisor-only translated page faults.
+4. `SW12=1` and `SW8=1`: supervisor access to that same translated page
+   succeeds.
+
+For each smoke case, `HW1B` should record:
+
+- switch setting
+- expected LED/result meaning
+- actual LED/result observation
+- pass, fail, blocked, or inconclusive result
+- photo, screenshot, transcript, or written observation
+
+If the existing Basys 3 demo collateral does not clearly define the expected
+observation for a case, `HW1B` must stop as blocked and report the ambiguity
+rather than inventing or substituting a new smoke target.
+
 ## Pre-flight Checklist For HW1B
 
 Before programming hardware or running a hardware-facing flow, the future
@@ -172,6 +267,13 @@ commit, tool, board, artifact, and evidence available up to the stop point.
 - Result: pass/fail/blocked/inconclusive
 - Deviations:
 - Follow-up needed:
+
+| Case | Switch setting | Expected result | Actual observation | Evidence | Result |
+|---|---|---|---|---|---|
+| all switches low |  |  |  |  | pass/fail/blocked/inconclusive |
+| SW15=1 |  |  |  |  | pass/fail/blocked/inconclusive |
+| SW8=1 |  |  |  |  | pass/fail/blocked/inconclusive |
+| SW12=1 and SW8=1 |  |  |  |  | pass/fail/blocked/inconclusive |
 ```
 
 ## Non-goals
