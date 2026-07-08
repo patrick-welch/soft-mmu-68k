@@ -12,6 +12,18 @@ This is a hardware design project. Treat RTL, testbenches, FPGA collateral, docu
 
 Do not claim full Motorola, MC68851, MC68030, MC68040, or MC68060 compatibility unless the behavior is implemented, tested, and documented in this repository.
 
+## Repository root and local checkout layout
+
+The Git repository root is the directory containing this `AGENTS.md` file and `.git/`.
+
+Do not infer project identity from the local checkout directory name. In local development, the checkout directory may be named `002`, `004`, or another lab/workbench name.
+
+The active HDL project payload is `soft-mmu-68k/`.
+
+Run HDL project scripts from `soft-mmu-68k/` unless a packet explicitly says otherwise.
+
+Ignored local lab collateral may exist beside `soft-mmu-68k/` at the repository root. Examples include chat transcripts, VS Code workspaces/profiles, smoke results, Vivado project artifacts, and project-structure scratch files. These are not part of the tracked project unless explicitly assigned.
+
 ## Required operating model
 
 Work in small, reviewable packets.

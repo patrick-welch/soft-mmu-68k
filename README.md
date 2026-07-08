@@ -163,4 +163,4 @@ The project deliberately avoids claiming full architectural compatibility until 
 
 ## License
 
-See [`LICENSE`](soft-mmu-68k/LICENSE).
+See [`LICENSE.md`](LICENSE.md).
