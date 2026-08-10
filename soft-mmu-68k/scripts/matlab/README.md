@@ -2,12 +2,12 @@
 
 This directory contains MATLAB support code for project verification collateral.
 
-The files here are not synthesizable RTL. They are used to model expected behavior, generate golden vectors, and inspect verification coverage for selected RTL blocks.
+The files here are not synthesizable RTL. They are used to model expected behavior, generate directed-case tables and golden vectors, and inspect verification coverage for selected RTL blocks.
 
 ## Directory layout
 
 - `models/` - MATLAB reference models for RTL behavior.
-- `generators/` - scripts/functions that generate golden-vector files.
+- `generators/` - scripts/functions that generate directed-case tables and/or golden-vector files.
 - `examples/` - runnable demos that exercise the models and generators.
 
 ## Current proven flow: `perm_check`
@@ -82,6 +82,101 @@ run('soft-mmu-68k/scripts/matlab/examples/run_perm_check_demo.m')
 ```
 
 The example is location-aware and adds the required `models/` and `generators/` paths before generating the CSV.
+
+## Current in-memory reference flow: `MTC1` TC/CRP span model
+
+MTC1 adds a deterministic MATLAB reference model for the current
+TC1B-tested single-level TC/CRP span boundary:
+
+```text
+MATLAB scalar reference model -> in-memory directed-case table -> demo assertions
+```
+
+This is intentionally different from the `perm_check` golden-vector flow.
+MTC1 writes no CSV, creates no output directory, and has no SystemVerilog
+consumer in this packet.
+
+Files:
+
+- `models/mmu_tc_crp_span_reference.m`
+- `generators/generate_tc_crp_span_vectors.m`
+- `examples/run_tc_crp_span_demo.m`
+
+The current MTC1 behavioral boundary is:
+
+```text
+VPN             = VA >> PAGE_SHIFT
+PAGE_OFFSET     = low PAGE_SHIFT bits of VA
+VPN_WIDTH       = VA_WIDTH - PAGE_SHIFT
+TABLE_ENTRIES   = low VPN_WIDTH bits of TC
+IN_RANGE        = VPN < TABLE_ENTRIES
+ROOT_SOURCE     = CRP
+SRP_USED        = false
+DESCRIPTOR_REQ  = IN_RANGE
+DESCRIPTOR_ADDR = CRP + VPN * DESCR_BYTES, when IN_RANGE
+PREWALK_FAULT   = none when IN_RANGE
+                  unmapped_span when not IN_RANGE
+```
+
+An in-range result only permits the current descriptor request. It does not
+mean that final translation succeeded. Descriptor validity/type, bus errors,
+permissions, TLB behavior, and final physical-address generation remain
+outside MTC1.
+
+The generator returns one in-memory MATLAB table with 13 deterministic rows
+covering nine conceptual cases:
+
+1. first in-range VPN;
+2. last in-range VPN;
+3. first out-of-range VPN;
+4. alternate CRP;
+5. TC span change;
+6. SRP inert / supervisor-class access;
+7. same VPN with different page offset;
+8. zero table span;
+9. TC upper bits inert.
+
+Paired comparison cases account for the 13 table rows. The generator-only
+metadata columns are `case_name` and `variant`; the remaining columns are the
+20 canonical MTC1 scalar-model result fields.
+
+The scalar implementation uses MATLAB `uint64` values for integer-safe scalar
+representation. Accordingly:
+
+```text
+VA_WIDTH <= 64
+FC_WIDTH <= 64
+```
+
+are MATLAB scalar representation limits only. They are **not** MC68851
+architectural limits and are **not** SM68861 architectural limits.
+
+MTC1 does not implement full Motorola TC address geometry. The following remain
+explicitly deferred:
+
+- TIA/TIB/TIC/TID decoding;
+- PS-driven page-size selection;
+- Initial Shift semantics;
+- multi-level address partitioning;
+- architectural CRP/SRP root-selection rules;
+- root- and pointer-descriptor traversal.
+
+Run the MTC1 demo from the Git working-tree root with:
+
+```matlab
+run('soft-mmu-68k/scripts/matlab/examples/run_tc_crp_span_demo.m')
+```
+
+If MATLAB is already in the `soft-mmu-68k/` project-content directory, the
+equivalent invocation is:
+
+```matlab
+run('scripts/matlab/examples/run_tc_crp_span_demo.m')
+```
+
+The demo adds the required model/generator paths, displays the in-memory
+directed-case table, prints a concise summary, and asserts the packet invariants
+without creating a committed artifact.
 
 ## Documentation policy
 
