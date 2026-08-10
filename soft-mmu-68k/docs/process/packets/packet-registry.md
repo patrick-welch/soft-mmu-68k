@@ -6,7 +6,7 @@ It records status and relationships; it does not replace the packet definition, 
 
 | Packet | Title | Status | Depends on | Owner | Branch / PR | Decision source | Packet definition | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PROC1A | Durable Packet, Memorandum, and Briefing Framework | Active | None | MMU Documentation Manager | `docs/proc1a-process-record-framework` / PR pending | Project Lead authorization in approved PROC1A packet | [PROC1A definition](PROC1A-durable-process-record-framework.md) | Framework packet. Historical/current packet bootstrap is intentionally deferred to PROC1B. |
+| PROC1A | Durable Packet, Memorandum, and Briefing Framework | Review | None | MMU Documentation Manager | `docs/proc1a-process-record-framework` / PR #38 | Project Lead authorization in approved PROC1A packet | [PROC1A definition](PROC1A-durable-process-record-framework.md) | Framework packet. Historical/current packet bootstrap is intentionally deferred to PROC1B. |
 
 ## Registry status
 
