@@ -7,7 +7,7 @@
 - **Record status:** Source briefing
 - **Related packet(s):** `MTC1`
 - **Related memorandum:** [MEMO-2026-001 — MTC1 scope and sequencing](../MEMO-2026-001-mtc1-scope-and-sequencing.md)
-- **Source/provenance note:** Preserved from the Project Lead-supplied source artifact `MTC1_DEV_Manager_Briefing.md`. The substantive source text below is preserved without folding in the later DEV Manager amendments. Repository formatting is normalized to LF line endings only.
+- **Source/provenance note:** Preserved from the Project Lead-supplied source artifact `MTC1_DEV_Manager_Briefing.md`. The substantive source text below is preserved without folding in the later DEV Manager amendments. Repository formatting is normalized to LF line endings and trailing-whitespace cleanup; no substantive wording was changed.
 
 ---
 
@@ -15,9 +15,9 @@
 
 # Briefing to DEV Manager: Re-establish and sharpen MTC1
 
-From: MATLAB Toolchain Coach  
-To: DEV Manager  
-Project: `patrick-welch/soft-mmu-68k`  
+From: MATLAB Toolchain Coach
+To: DEV Manager
+Project: `patrick-welch/soft-mmu-68k`
 Subject: Proposed authoritative definition for `MTC1`
 
 ## Request
