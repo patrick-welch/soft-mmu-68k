@@ -13,6 +13,19 @@ This protocol defines the expected lifecycle for packetized AI-assisted work in 
 7. Merge
 8. Update durable project state if needed
 
+## Durable process records
+
+The packet lifecycle is supported by the durable process-record framework under `soft-mmu-68k/docs/process/`:
+
+- approved packet definitions are preserved under [`../packets/`](../packets/);
+- packet status and dependencies are tracked in [`../packets/packet-registry.md`](../packets/packet-registry.md);
+- material project/process rationale belongs under [`../memoranda/`](../memoranda/);
+- substantive briefing inputs used by those decisions belong under [`../memoranda/briefings/`](../memoranda/briefings/).
+
+Do not reconstruct historical packet, memorandum, or briefing records from memory when reliable source evidence is unavailable. Use repository, PR, committed-document, or preserved source evidence and record uncertainty when provenance is incomplete.
+
+Durable record updates are part of packet closeout when a packet changes project process state, sequencing, responsibilities, or other durable project state.
+
 ## 1. Packet brief
 
 A packet brief defines a bounded unit of work before an implementation agent starts.
@@ -256,6 +269,8 @@ Before merge, confirm:
 
 ## 8. Update durable project state
 
-If the packet changes project process, architecture, compatibility status, test scope, MATLAB vector policy, or board bring-up status, update durable documentation in the same PR or a follow-up documentation packet.
+If the packet changes project process, architecture, compatibility status, test scope, MATLAB vector policy, board bring-up status, packet sequencing, or other durable project state, update durable documentation in the same PR or a follow-up documentation packet.
+
+For process packets, use the packet registry, packet definition, memorandum, or briefing record appropriate to the type of state being preserved. Do not duplicate full implementation evidence that already belongs in the PR or repository history.
 
 Chat summaries are not durable project state unless copied into repository documentation or PR history.
