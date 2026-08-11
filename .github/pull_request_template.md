@@ -1,8 +1,10 @@
 # Pull request packet report
 
-## Packet ID
+## Packet Issue
 
-`<packet id>`
+Packet Issue: #<number>
+Packet ID: <id>
+Branch: <branch>
 
 ## Summary
 
@@ -27,10 +29,13 @@ Select all that apply:
 
 ## Scope confirmation
 
-- [ ] This PR changes only files allowed by the packet brief.
+- [ ] This PR changes only files allowed by the packet brief / controlling packet Issue.
 - [ ] This PR does not modify forbidden files.
 - [ ] This PR does not include unrelated cleanup or formatting.
 - [ ] This PR does not include generated artifacts unless explicitly required by the packet.
+- [ ] The PR links the controlling packet Issue.
+- [ ] The Issue body reflects the current approved scope.
+- [ ] Any amendments are linked from the Issue decision history.
 
 ## Behavior or documentation implemented
 
@@ -52,7 +57,7 @@ Results:
 
 - <test or command> - <reason>
 
-For documentation-only packets, include:
+For documentation-only packets, include the packet-specific exact skip statement when one is required. Otherwise use:
 
 ```text
 SKIPPED: documentation-only packet
@@ -98,3 +103,9 @@ DEV Manager decision:
 - [ ] Not approved
 
 Dispensation applies only to the reviewed HEAD commit. Any further push, amend, or force-push requires re-review.
+
+## Closeout
+
+Reviewed HEAD:
+Merge commit after closeout:
+Packet Issue closeout comment:
