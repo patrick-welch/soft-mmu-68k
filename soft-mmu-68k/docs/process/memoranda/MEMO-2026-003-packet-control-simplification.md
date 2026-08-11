@@ -76,7 +76,7 @@ For packets created after PROC2A:
 - an unapproved body edit is not implementation authorization;
 - conflicts between Issue body and decision comments require escalation.
 
-PROC2A itself is the transition packet and uses manually created packet Issue #42 before the Issue template exists.
+PROC2A itself is the transition packet and uses manually created packet Issue #41 before the Issue template exists. A concurrently created duplicate Issue #42 was explicitly marked duplicate and closed; it is not an authorization or state source.
 
 ## Legacy registry freeze
 
@@ -197,7 +197,7 @@ The adopted model preserves the conceptual separation created by PROC1A/PROC1B w
 
 - Complete PROC2A review, Dispensation, and Project Lead merge.
 - After merge, establish/verify the documented packet labels if administration was not available during implementation.
-- Post the PROC2A Issue closeout comment and close Issue #42 after merge.
+- Post the PROC2A Issue closeout comment and close Issue #41 after merge.
 - Only then may the Project Lead/MMU Dev Manager decide whether to prepare HW1B under the new control model.
 
 ## Supersedes / superseded by
@@ -211,7 +211,8 @@ The adopted model preserves the conceptual separation created by PROC1A/PROC1B w
 
 ## Related packet Issue / process records
 
-- Packet Issue #42 — `PROC2A — Simplify Packet Control and Establish MMU Packet Coordinator`
+- Packet Issue #41 — `PROC2A — Simplify Packet Control and Establish MMU Packet Coordinator`
+- Duplicate Issue #42 — closed as duplicate; not controlling
 - [PROC2A committed governance packet definition](../packets/PROC2A-simplify-packet-control-and-establish-packet-coordinator.md)
 - [Packet and PR protocol](../ai/packet-and-pr-protocol.md)
 - [Role registry](../ai/role-registry.md)
