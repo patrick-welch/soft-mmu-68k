@@ -2,151 +2,172 @@
 
 This protocol defines the expected lifecycle for packetized AI-assisted work in `soft-mmu-68k`.
 
-## Lifecycle
+For packets created after PROC2A, the **GitHub packet Issue is the live operational packet control record**. Historical committed packet files remain valid records; ordinary new packets do not require duplicate committed packet Markdown.
 
-1. Packet brief
-2. Implementation agent work
-3. Agent self-report
-4. DEV Manager review
-5. Amend or approve
-6. DEV Manager Dispensation
-7. Merge
-8. Update durable project state if needed
+## Authority and evidence precedence
 
-## Durable process records
-
-The packet lifecycle is supported by the durable process-record framework under `soft-mmu-68k/docs/process/`:
-
-- approved packet definitions are preserved under [`../packets/`](../packets/);
-- packet status and dependencies are tracked in [`../packets/packet-registry.md`](../packets/packet-registry.md);
-- material project/process rationale belongs under [`../memoranda/`](../memoranda/);
-- substantive briefing inputs used by those decisions belong under [`../memoranda/briefings/`](../memoranda/briefings/).
-
-Do not reconstruct historical packet, memorandum, or briefing records from memory when reliable source evidence is unavailable. Use repository, PR, committed-document, or preserved source evidence and record uncertainty when provenance is incomplete.
-
-Durable record updates are part of packet closeout when a packet changes project process state, sequencing, responsibilities, or other durable project state.
-
-## 1. Packet brief
-
-A packet brief defines a bounded unit of work before an implementation agent starts.
-
-````markdown
-# Packet: <packet id> - <short title>
-
-## Role
-
-You are the implementation agent for this packet.
-
-## Branch
-
-Create or use branch: `<branch-name>`
-
-## Goal
-
-<one paragraph describing the intended change>
-
-## Allowed files
-
-- `<path>`
-
-## Do not edit
-
-- `<path>`
-
-## Requirements
-
-- <requirement>
-
-## Verification
-
-Run:
-
-```bash
-<exact command>
-```
-
-If a command is skipped, report why.
-
-## Commit
-
-Commit message:
+Use this order when records conflict:
 
 ```text
-<message>
+current merged repository state
+>
+reviewed PR / reviewed commit / CI evidence
+>
+current approved packet Issue body plus Dev Manager or Project Lead decision comments
+>
+committed packet definition, when one exists
+>
+approved management memorandum
+>
+preserved source briefing
+>
+chat recollection / generic model memory
 ```
 
-## Final response required
+A packet Issue controls authorized operational work. It does not override merged code, reviewed tests, or durable technical evidence.
 
-Return:
+## Roles
 
-1. Branch
-2. Commit hash
-3. Files changed
-4. Tests run
-5. Tests not run
-6. Known limitations
-7. Follow-up needed
-````
+```text
+Project Lead
+    final project authority and merge authority
 
-## 2. Implementation agent work
+MMU Dev Manager
+    engineering decision authority: packet existence, technical scope,
+    sequencing, amendments, review, commit-specific Dispensation
 
-Implementation agents must stay inside the packet. They may not expand file scope, change workflows, or repair unrelated issues unless the packet explicitly authorizes that work.
+MMU Packet Coordinator
+    packet control authority: Issue normalization, approved status,
+    links, administrative completeness, queues, closeout, contradiction detection
 
-If blocked, the agent must stop and report rather than thrash.
-
-## 3. Agent self-report
-
-````markdown
-# Agent result report
-
-## Branch
-
-`<branch>`
-
-## Commit
-
-`<commit>`
-
-## Files changed
-
-- `<path>` - <summary>
-
-## Files intentionally not touched
-
-- `<path>`
-
-## Summary
-
-<what changed>
-
-## Verification performed
-
-```bash
-<command>
+Implementation owner
+    executes only the approved packet scope
 ```
 
-Result: `<pass/fail/skipped>`
+The Packet Coordinator may not invent technical scope, approve its own decisions, resequence work, issue Dispensation, or approve merge.
 
-## Tests not run
+## Packet Issue lifecycle
 
-- `<test>` - <reason>
+```text
+1. Specialist, Project Lead, or manager proposes work.
+2. Dev Manager or Project Lead explicitly approves scope and sequencing.
+3. Packet Coordinator creates or normalizes the packet Issue.
+4. Packet Coordinator applies status:ready.
+5. Implementation owner creates the named branch and links the Issue.
+6. Implementation owner opens a PR linked to the Issue.
+7. Packet Coordinator checks administrative completeness.
+8. Dev Manager performs technical review, amendment, or Dispensation.
+9. Project Lead merges.
+10. Packet Coordinator posts closeout, records PR and merge commit, and closes the Issue.
+```
 
-## Known limitations
+A proposed Issue may exist before approval, but implementation must not begin until the Dev Manager or Project Lead explicitly approves the scope and the operational status is `ready`.
 
-- <limitation>
+## Minimal operational labels
 
-## Follow-up needed
+Documented packet labels are limited to:
 
-- <follow-up>
-````
+```text
+packet
+status:proposed
+status:ready
+status:active
+status:review
+status:blocked
+status:deferred
+```
 
-## 4. DEV Manager review
+Closed Issue dispositions are recorded in the closeout comment as `merged`, `cancelled`, or `superseded`.
 
-The DEV Manager reviews the PR against the packet brief, repository state, CI, and relevant source material.
+Do not create a broad subsystem/priority/manager/compatibility taxonomy unless a later packet authorizes it.
+
+## Issue body and decision-history rules
+
+The Issue body is the current normalized approved scope.
+
+- Approval must be recorded in an explicit MMU Dev Manager or Project Lead comment.
+- A material amendment must be recorded in a new explicit decision comment.
+- After approval/amendment, the Packet Coordinator may update the Issue body to the current approved scope.
+- The Packet Coordinator must maintain a short Decision History section linking the decision comments.
+- Editing the body must not erase earlier decision history.
+- An implementation agent may not treat an unapproved body edit as authorization.
+- If the Issue body and decision comments conflict, stop and escalate.
+
+## Required packet Issue content
+
+The packet Issue should record:
+
+- packet ID and title;
+- decision owner;
+- execution owner;
+- proposed/approved branch;
+- dependencies;
+- goal;
+- approved scope;
+- allowed and forbidden files;
+- requirements;
+- acceptance criteria;
+- verification requirements;
+- source/design/memorandum links;
+- branch and PR links;
+- Decision History;
+- blockers/deferrals;
+- closeout fields.
+
+Use `.github/ISSUE_TEMPLATE/packet.md` for post-PROC2A packets.
+
+## Implementation owner work
+
+Before editing, the implementation owner must read the controlling Issue, verify explicit approval/readiness, confirm the branch, allowed files, forbidden files, and verification, and stop if the Issue conflicts with approval/amendment comments.
+
+Implementation owners must stay inside the packet. They may not expand file scope, change workflows, or repair unrelated issues unless explicitly authorized.
+
+If blocked, stop and report rather than thrash.
+
+## Implementation self-report
+
+Return at minimum:
+
+```text
+Packet Issue:
+Packet ID:
+Branch:
+Commit:
+Files changed:
+Files intentionally not touched:
+Summary:
+Verification performed:
+Tests not run and reasons:
+Known limitations:
+Follow-up needed:
+```
+
+The PR must link the controlling packet Issue.
+
+## Packet Coordinator administrative check
+
+Before technical review, the Packet Coordinator may check:
+
+- Issue has explicit approval/amendment decision evidence;
+- Issue body reflects the current approved scope;
+- branch matches approved branch;
+- PR links the Issue;
+- changed-file set is administratively consistent with allowed scope;
+- verification/results fields are present;
+- status/PR links are current;
+- obvious Issue/PR contradictions are escalated.
+
+This is not technical PR approval and does not replace DEV Manager review.
+
+## DEV Manager review
+
+The DEV Manager reviews the PR against the controlling packet Issue, explicit decision comments, repository state, CI, and relevant source material.
 
 ```markdown
 # DEV Manager PR Review
 
+Packet Issue: #<number>
+Packet: <id>
 PR: #<number>
 Branch: `<branch>`
 Reviewed HEAD: `<sha>`
@@ -156,11 +177,11 @@ Base: `<base branch or sha>`
 
 - Allowed files changed: <yes/no>
 - Forbidden files changed: <yes/no>
-- Packet scope preserved: <yes/no>
+- Approved scope preserved: <yes/no>
 
-## Behavior review
+## Behavior / documentation review
 
-<summary of behavior or documentation reviewed>
+<summary>
 
 ## Verification review
 
@@ -184,47 +205,20 @@ Base: `<base branch or sha>`
 <amend / approve / reject>
 ```
 
-## 5. Amendment request
+## Amendment request
 
-Use an amendment request when the PR is close but not ready.
+A material amendment requires an explicit Dev Manager or Project Lead Issue decision comment. The Packet Coordinator may then normalize the Issue body and add the decision comment to Decision History.
 
-````markdown
-# Amendment request
+Any additional push, amend, or force-push after reviewed HEAD requires re-review.
 
-PR: #<number>
-Reviewed HEAD: `<sha>`
+## DEV Manager Dispensation
 
-## Required changes
-
-1. <change>
-2. <change>
-
-## Files allowed for amendment
-
-- `<path>`
-
-## Files still forbidden
-
-- `<path>`
-
-## Verification required after amendment
-
-```bash
-<command>
-```
-
-## Notes
-
-Any additional push, amend, or force-push invalidates the previous review state and requires re-review.
-````
-
-## 6. DEV Manager Dispensation
-
-DEV Manager Dispensation is a commit-specific merge authorization. It is not a general approval of a branch name or topic.
+DEV Manager Dispensation is a commit-specific merge authorization. It is not general approval of a branch name, Issue, or topic.
 
 ```markdown
 # DEV Manager Dispensation
 
+Packet Issue: #<number>
 PR: #<number> - <title>
 Branch: `<branch>`
 Reviewed HEAD: `<sha>`
@@ -258,19 +252,45 @@ This dispensation applies only to reviewed commit `<sha>`.
 Any further push, amend, or force-push invalidates this dispensation and requires re-review.
 ```
 
-## 7. Merge
+## Merge
 
 Before merge, confirm:
 
-- PR head still matches reviewed HEAD
-- required checks still pass or are intentionally skipped
-- no new commits appeared after dispensation
-- PR body accurately describes tests and skipped tests
+- PR head still matches reviewed HEAD;
+- required checks still pass or are intentionally skipped;
+- no new commits appeared after Dispensation;
+- PR body accurately describes tests and skipped tests;
+- the controlling packet Issue is linked and current.
 
-## 8. Update durable project state
+The Project Lead retains final merge authority where project process requires it.
 
-If the packet changes project process, architecture, compatibility status, test scope, MATLAB vector policy, board bring-up status, packet sequencing, or other durable project state, update durable documentation in the same PR or a follow-up documentation packet.
+## Packet closeout
 
-For process packets, use the packet registry, packet definition, memorandum, or briefing record appropriate to the type of state being preserved. Do not duplicate full implementation evidence that already belongs in the PR or repository history.
+After merge, the Packet Coordinator posts a concise closeout comment recording:
 
-Chat summaries are not durable project state unless copied into repository documentation or PR history.
+- disposition (`merged`, `cancelled`, or `superseded`);
+- PR number;
+- reviewed HEAD;
+- merge commit when applicable;
+- tests/checks disposition;
+- material deferred follow-up, if any.
+
+Then close the packet Issue when the approved lifecycle permits closure.
+
+Do not require a Git commit merely to change operational packet status from Ready to Active, Review, or Merged.
+
+## Durable process records
+
+Committed packet definitions, memoranda, and briefings are no longer automatic for every packet.
+
+- Create a committed packet/specification when stable complex scope or durable project knowledge justifies it.
+- Create a memorandum only for consequential governance, verification-policy, waiver/risk, role, material sequencing, or comparable decisions.
+- Preserve a full briefing only when it contains unique evidence/analysis, material alternatives/disagreement, a major handoff, or explicit Project Lead retention direction.
+
+Do not reconstruct historical records from memory when reliable evidence is unavailable.
+
+## Historical transition
+
+The historical `docs/process/packets/packet-registry.md` is frozen by PROC2A. It remains a bootstrap record and is not the live packet-status source.
+
+Do not create packet Issues retroactively for TC1A, TC1B, CTRL1, CTRL1B, HW1A, MTC1, PROC1A, PROC1B, or earlier P-series history unless a later packet explicitly authorizes a specific migration need.
