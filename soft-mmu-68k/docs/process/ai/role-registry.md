@@ -21,7 +21,7 @@ Use Implementation tier coding agents, such as Codex or Copilot, for bounded bra
 
 Use standard speed by default for implementation agents.
 
-Use high reasoning for complex RTL, verification, toolchain breakage, or source-interpretation work.
+Use high reasoning for complex RTL, verification, toolchain breakage, source-interpretation work, or packet-state reconstruction.
 
 Do not use fast or mechanical models for merge approval, compatibility claims, or packet scope decisions.
 
@@ -36,7 +36,7 @@ Do not use fast or mechanical models for merge approval, compatibility claims, o
 - simulator and lint command guidance
 - Vivado bring-up process guidance
 - Codex/Copilot workflow selection and guardrails
-- process documentation packets such as `soft-mmu-68k/docs/process/ai/`
+- process mechanics review
 
 **Must not own:**
 
@@ -57,9 +57,10 @@ Do not use fast or mechanical models for merge approval, compatibility claims, o
 
 **Owns:**
 
+- deciding whether packetized work should exist
 - packet definition and sequencing
 - PR review for implementation packets
-- scope enforcement
+- scope enforcement and amendment decisions
 - DEV Manager Dispensation
 - merge-readiness recommendation
 
@@ -69,11 +70,55 @@ Do not use fast or mechanical models for merge approval, compatibility claims, o
 - unstated expansion of compatibility claims
 - bypassing test or CI evidence
 
-**Typical inputs:** packet brief, PR diff, CI results, agent result report, source references.
+**Typical inputs:** packet Issue, packet brief when one exists, PR diff, CI results, agent result report, source references.
 
-**Typical outputs:** review findings, amendment requests, approved dispensation, deferred-work notes.
+**Typical outputs:** approval/amendment comments, review findings, approved Dispensation, deferred-work notes.
 
 **Recommended tier:** Decision tier.
+
+## MMU Packet Coordinator
+
+**Purpose:** Operate the live packet-control system and keep packet state reconstructable from GitHub and durable repository evidence.
+
+**Owns:**
+
+- packet ID uniqueness
+- creation and normalization of packet Issues after proposal or approval
+- application of the approved operational status
+- recording approved dependencies and sequencing
+- linking packet Issue, branch, PR, and durable records
+- administrative completeness checks
+- Ready / Active / Review / Blocked / Deferred queue reporting
+- closeout comments and Issue closure after the required decision/merge evidence exists
+- stale or contradictory packet-state detection
+- escalation of missing decisions
+
+**Must not own:**
+
+- deciding whether a packet should exist
+- technical packet scope
+- packet sequencing decisions
+- Motorola-family interpretation
+- technical PR approval
+- DEV Manager Dispensation
+- merge approval
+- broad documentation stewardship
+- direct implementation unless separately assigned
+
+**Authority shorthand:**
+
+```text
+Dev Manager         = engineering decision authority
+Packet Coordinator  = packet control authority
+```
+
+The Packet Coordinator chat is a **control desk, not an authority source**. A replacement Packet Coordinator must reconstruct state from packet Issues, linked PRs, commits, CI, and durable repository documents. Chat memory alone is not sufficient authority for packet creation, approval, resequencing, status, or closeout.
+
+**Typical inputs:** open/closed packet Issues, explicit Dev Manager/Project Lead decision comments, PR metadata, reviewed HEADs, CI results, merged commits, durable process records.
+
+**Typical outputs:** normalized packet Issues, administrative completeness findings, current packet queues, closeout comments, contradiction/staleness reports, escalation requests.
+
+**Recommended tier:** Engineering tier with high reasoning for state reconstruction. The role has no independent Decision-tier authority; conflicts are escalated.
 
 ## MMU Test Manager
 
@@ -109,12 +154,14 @@ Do not use fast or mechanical models for merge approval, compatibility claims, o
 - PR wording around implemented, tested, deferred, and uncertain behavior
 - source-manifest alignment
 - wiki/imported-doc consistency
+- broader project documentation quality and alignment
 
 **Must not own:**
 
 - new compatibility claims without source and implementation support
 - RTL or testbench changes unless explicitly assigned
 - merge dispensation for implementation packets
+- live packet-state bookkeeping assigned to the Packet Coordinator
 
 **Typical inputs:** PR diffs, source manifest, design docs, README, wiki pages.
 

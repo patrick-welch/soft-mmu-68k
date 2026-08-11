@@ -1,28 +1,29 @@
 # Substantive Briefing Records
 
-A substantive briefing is a project deliverable prepared for another project participant that materially supports later review or decision-making.
+A briefing record preserves exceptional decision input when the source material itself has durable value.
 
-Examples include a briefing that:
+PROC2A narrows the standing retention rule: **not every substantive manager-to-manager or chat-generated briefing should be committed.**
 
-- transfers project state;
-- recommends a decision;
-- requests authorization;
-- proposes packet scope or sequencing;
-- hands off responsibility;
-- summarizes review findings for another decision-maker;
-- materially affects later project/process work.
+## Preserve a full briefing when at least one criterion is met
 
-## Standing preservation rule
+Preserve the source briefing when:
 
-When a substantive briefing is used for project decision-making, preserve it as a repository briefing record.
+1. it contains unique source analysis or evidence not captured elsewhere;
+2. it records materially different alternatives or disagreement that future reviewers may need to revisit;
+3. it is a major manager/coach/role handoff whose loss would make project state expensive to reconstruct; or
+4. the Project Lead explicitly requires retention.
 
-The briefing record should preserve the substantive source content rather than only a later summary. Do not silently rewrite the originating participant's recommendation. If formatting is normalized, state that formatting was normalized.
+Otherwise, record a concise decision-input summary in the controlling packet Issue or relevant memorandum and link the originating artifact when a durable link exists.
 
-## Not every chat message is a briefing
+Ordinary status reports, packet suggestions, amendment handoffs, review summaries, and chat-generated explanations do not automatically require committed briefing files.
 
-Do not archive ordinary conversation, brainstorming fragments, or incidental chat messages merely because they occurred during project work.
+Do not commit full chat transcripts.
 
-This rule applies to substantive deliverables intended to transfer, recommend, review, authorize, or hand off durable project state.
+## Source fidelity
+
+When a briefing is preserved, preserve the substantive source content rather than only a later summary. Do not silently rewrite the originating participant's recommendation to match a later decision.
+
+Historical wording may differ from the final adopted terminology. Preserve the original wording and use metadata or a terminology/provenance note to explain the later decision.
 
 ## Filename
 
@@ -32,16 +33,16 @@ Use:
 BRIEF-<year>-<sequence>-<short-title>.md
 ```
 
-## Required metadata
+## Metadata
 
-Each briefing record should identify:
+A preserved briefing should identify:
 
 - **Title**
 - **Date or source date**, when known
 - **Originating role**
 - **Recipient / decision role**
 - **Record status:** Source briefing
-- **Related packet(s)**
+- **Related packet Issue or packet ID**
 - **Related memorandum**, when applicable
 - **Source/provenance note**
 
@@ -51,6 +52,4 @@ A briefing is an input record. It is not itself final approval unless the Projec
 
 Preserve source briefings from actual files or other reliable evidence. Do not reconstruct a briefing from memory when the source is unavailable.
 
-Do not duplicate whole chat transcripts, PR diffs, CI logs, or technical design records. Preserve the substantive briefing artifact and link durable evidence as needed.
-
-`PROC1A` does not ingest existing briefing artifacts. The evidence-backed bootstrap of specifically approved existing briefings is deferred to `PROC1B`.
+Do not duplicate whole PR diffs, CI logs, source manuals, or technical design records. Preserve only the decision-critical source artifact and link durable evidence as needed.

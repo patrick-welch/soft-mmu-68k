@@ -1,117 +1,94 @@
-# Canonical Packet Records
+# Packet Records
 
-This directory is the durable home for approved packet definitions and the project packet registry.
+This directory preserves historical committed packet definitions and durable packet/governance records that merit repository storage.
 
-## Status vocabulary
+## Post-PROC2A default rule
 
-Use only these packet states:
+For packets created after PROC2A, the **GitHub Issue is the canonical live operational packet brief**.
 
-```text
-Proposed
-Approved
-Ready
-Active
-Review
-Merged
-Deferred
-Superseded
-Cancelled
-```
+An ordinary bounded implementation packet does not require a duplicate committed `docs/process/packets/<packet>.md` file merely because the packet exists.
 
-## Packet-definition location
+Create a committed packet/specification document only when stable repository content adds clear durable value, for example:
 
-Official packet definitions belong at:
+- architectural behavior or verification plans;
+- hardware procedures;
+- governance/process changes;
+- unusually complex or multi-stage packet specifications whose stable scope should remain in the Git tree.
 
-```text
-soft-mmu-68k/docs/process/packets/<packet-id>-<short-title>.md
-```
+Historical packet files created before PROC2A remain valid records and must not be deleted or rewritten merely to fit the new model.
 
-A packet definition should record, as applicable:
+## Live control plane
 
-- packet identity
-- title
-- status
-- owner
-- branch
-- goal
-- dependencies
-- allowed files
-- forbidden files
-- requirements
-- acceptance criteria
-- verification
-- closeout
-- known deferrals
-- decision or memorandum links
+For new packets, use one GitHub Issue containing the current normalized approved scope and operational state.
 
-An approved packet definition defines the authorized scope of work. It does not prove that the work was implemented. The pull request, reviewed commit, CI/test evidence, and merged repository state establish what was actually changed and accepted.
+The Issue should record, as applicable:
 
-## Packet registry
+- packet identity and title;
+- decision owner and execution owner;
+- proposed/approved branch;
+- dependencies;
+- goal and approved scope;
+- allowed and forbidden files;
+- requirements and acceptance criteria;
+- verification requirements;
+- source/design/memorandum links;
+- branch and PR links;
+- blockers/deferrals;
+- decision-history links;
+- closeout disposition.
 
-[`packet-registry.md`](packet-registry.md) is the compact project-wide index for packet status, dependency, ownership, branch/PR, decision source, and packet-definition links.
+Approval or material amendment must be recorded in an explicit MMU Dev Manager or Project Lead Issue comment. After such a decision, the MMU Packet Coordinator may normalize the Issue body to the current approved scope while retaining Decision History links to the decision comments.
 
-The registry must stay compact. Do not duplicate full packet definitions, PR descriptions, diffs, or test logs there.
+An implementation agent must not treat an unapproved body edit as authorization. If the Issue body conflicts with approval/amendment comments, stop and escalate.
 
-## Material packet changes
+## Operational status
 
-Do not silently rewrite packet history.
-
-If an approved packet changes materially:
-
-1. record the reason in a management memorandum;
-2. update the packet registry;
-3. update or supersede the packet definition as appropriate;
-4. preserve links between the old and new records.
-
-Example:
+Use Issue state plus the minimal label set documented by PROC2A:
 
 ```text
-Original:
-M4 -> M5 -> M6
-
-Revised:
-M4 -> M5A -> M5B -> M6
+packet
+status:proposed
+status:ready
+status:active
+status:review
+status:blocked
+status:deferred
 ```
 
-The durable record should retain what changed, who approved it, why it changed, and what the current sequence is.
+Closed Issue dispositions are stated in the closeout comment as `merged`, `cancelled`, or `superseded`.
+
+Do not create parallel mutable status fields in committed Markdown.
+
+## Legacy registry
+
+[`packet-registry.md`](packet-registry.md) is retained as the **frozen legacy/bootstrap registry** produced during PROC1A/PROC1B and corrected by PROC2A. It is not the live packet-status source.
+
+Do not add new packets to it and do not update it for routine status transitions. Query GitHub Issues and linked PR/commit/CI evidence for current packet state.
 
 ## Authority chain
 
 ```text
-briefing record
-    preserves substantive decision input
-        ↓
-management memorandum
-    explains WHY a process/sequence decision was approved
-        ↓
-packet definition
-    defines WHAT work is authorized
-        ↓
-branch / pull request
-    records WHAT was actually changed and reviewed
-        ↓
 merged repository state
-    remains final authority for WHAT NOW EXISTS
+    = final authority for implemented state
+        ↓
+reviewed PR / reviewed commit / CI
+    = implementation, verification, and review evidence
+        ↓
+current approved packet Issue + explicit decision comments
+    = authorized operational scope
+        ↓
+committed packet definition, when one exists
+    = durable stable packet/governance record
+        ↓
+approved management memorandum
+    = exceptional process rationale
+        ↓
+preserved source briefing
+    = exceptional decision input
 ```
 
-Conflict precedence:
-
-```text
-current merged repository state
-    >
-reviewed PR / reviewed commit evidence
-    >
-approved packet definition for authorized scope
-    >
-approved management memorandum for process rationale
-    >
-preserved briefing record as decision input
-    >
-chat recollection / generic model memory
-```
-
-Technical architecture and compatibility decisions remain under `soft-mmu-68k/docs/design/` and are not replaced by this process hierarchy.
+Technical architecture and compatibility decisions remain under `soft-mmu-68k/docs/design/`.
 
 ## Evidence discipline
 
-Do not reconstruct historical packet definitions from memory. Historical packet records must be grounded in reliable repository, PR, committed-document, or preserved source evidence. Bounded historical/bootstrap work is handled by a separately authorized packet.
+Do not reconstruct packet state from chat memory when GitHub or repository evidence is available. Do not create retrospective Issues for historical packets unless a later explicitly authorized need requires it.

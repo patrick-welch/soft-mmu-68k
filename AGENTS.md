@@ -41,6 +41,21 @@ If ambiguity affects correctness, safety, file scope, interface behavior, or com
 
 If the ambiguity is minor and a conservative interpretation is obvious, proceed with the smallest safe change and state the assumption.
 
+## Packet Issue control after PROC2A
+
+For packets created after PROC2A, the controlling GitHub Issue is the live operational packet record.
+
+Before editing:
+
+- read the packet Issue;
+- confirm the Issue has explicit Dev Manager or Project Lead approval and is operationally ready;
+- confirm branch, allowed files, forbidden files, and verification requirements;
+- stop if the Issue body conflicts with approval/amendment comments.
+
+Every packet PR must link the controlling Issue.
+
+The Issue controls authorized work; merged repository state and reviewed PR/commit/CI evidence remain authoritative for implemented behavior. Chat memory is not sufficient authority to create, approve, resequence, or materially change packet scope.
+
 ## Repository discipline
 
 Do not perform broad cleanup.
