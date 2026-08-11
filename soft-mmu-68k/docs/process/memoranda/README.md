@@ -1,24 +1,36 @@
 # Management Memoranda
 
-Management memoranda are durable records of **why** a project/process decision was made.
+Management memoranda are exceptional durable records of **why** a consequential project/process decision was made.
 
-They preserve approved management rationale without replacing packet definitions, implementation evidence, or technical architecture documentation.
+They preserve approved management rationale without replacing packet Issues, implementation evidence, or technical architecture documentation.
 
 ## Appropriate memorandum subjects
 
 Use a memorandum for decisions such as:
 
-- creation of a packet series;
-- packet sequencing or dependency changes;
-- packet split or combination decisions;
-- packet deferral or cancellation;
-- accepted process risk;
-- manager or coach responsibility changes;
-- adoption of a verification or tooling workflow;
-- resolution of cross-manager recommendations;
-- supersession of earlier process decisions.
+- creation or retirement of a project role;
+- material cross-packet sequencing or dependency changes;
+- verification-policy changes;
+- accepted process risk or a formal waiver;
+- material packet split or combination decisions;
+- durable governance changes;
+- resolution of consequential cross-manager disagreement;
+- supersession of an earlier consequential process decision.
 
 Do not use memoranda as substitutes for technical architecture or compatibility records under `soft-mmu-68k/docs/design/`.
+
+## Events that do not require a memorandum
+
+A memorandum is not required merely because:
+
+- a packet was approved;
+- a packet moved to Review;
+- a pull request merged;
+- an ordinary packet amendment was made;
+- an implementation owner changed;
+- a routine follow-up packet was identified.
+
+Those events belong in the controlling packet Issue and PR history.
 
 ## Filename
 
@@ -28,9 +40,9 @@ Use:
 MEMO-<year>-<sequence>-<short-title>.md
 ```
 
-## Required fields
+## Recommended fields
 
-Each memorandum should record:
+When a memorandum is warranted, record as applicable:
 
 - **Subject**
 - **Date**
@@ -45,37 +57,35 @@ Each memorandum should record:
 - **Follow-up required**
 - **Supersedes / superseded by**
 - **Related briefing records**
-- **Related PRs / packet definitions / design docs**
+- **Related packet Issues / PRs / packet definitions / design docs**
 
 ## Authority
 
-A memorandum records approved project/process rationale at a point in time. It does not authorize implementation outside an approved packet and does not override later reviewed or merged repository behavior.
+A memorandum records approved management/process rationale at a point in time. It does not authorize implementation outside an approved packet Issue and does not override later reviewed or merged repository behavior.
 
 Use this relationship:
 
 ```text
-briefing record
-    preserves substantive decision input
+packet Issue + explicit decision comments
+    authorize and control current operational packet scope
         ↓
-management memorandum
-    explains WHY a process/sequence decision was approved
-        ↓
-packet definition
-    defines WHAT work is authorized
-        ↓
-branch / pull request
-    records WHAT was actually changed and reviewed
+branch / pull request / CI
+    record what was changed, tested, and reviewed
         ↓
 merged repository state
-    remains final authority for WHAT NOW EXISTS
+    remains final authority for what now exists
+
+memorandum
+    preserves exceptional WHY when the rationale itself has durable value
+
+briefing record
+    preserves exceptional source input when retention criteria are met
 ```
 
 ## Sequence and supersession
 
-Sequence changes must not silently rewrite history. When a sequence changes, record the decision, update the packet registry, mark replaced packet definitions `Superseded` when applicable, link old and new records, and retain the reason for the change.
+Consequential sequence changes must not silently rewrite history. Record the approval/amendment in the packet Issue. Create or update a memorandum only when the change meets the retention threshold above.
 
 ## Lightweight record rule
 
 A memorandum should capture the decision and rationale, not reproduce an entire chat transcript, PR diff, CI log, source manual, or design document. Link durable evidence instead.
-
-`PROC1A` creates this framework only. Historical memoranda are deferred to separately authorized evidence-backed work.
