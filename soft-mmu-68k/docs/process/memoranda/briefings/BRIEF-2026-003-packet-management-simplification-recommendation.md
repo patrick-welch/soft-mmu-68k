@@ -18,8 +18,8 @@ The preserved source briefing below uses the originally proposed role name **MMU
 
 # SM68861 Packet Management Simplification Recommendation
 
-**Date:** 2026-08-11  
-**Status:** Advisory recommendation; no repository changes authorized or made  
+**Date:** 2026-08-11
+**Status:** Advisory recommendation; no repository changes authorized or made
 **Project:** SM68861 — Soft MMU for 68k-family systems
 
 ## Executive recommendation
