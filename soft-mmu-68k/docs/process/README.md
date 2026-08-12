@@ -11,6 +11,7 @@ The process record separates live packet control, durable governance, implementa
 - [`memoranda/`](memoranda/) — exceptional durable project/process rationale for consequential governance, sequencing, verification-policy, waiver, or role decisions.
 - [`memoranda/briefings/`](memoranda/briefings/) — selectively preserved decision-critical source briefings.
 - [`hardware/`](hardware/) — hardware-facing process notes and repeatability plans.
+- [`human-guided-workflows/`](human-guided-workflows/) — selectively preserved historical human-guided execution and learning workflows.
 
 ## Control and record boundaries
 
