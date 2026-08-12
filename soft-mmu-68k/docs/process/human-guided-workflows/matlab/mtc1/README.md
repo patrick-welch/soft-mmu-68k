@@ -12,6 +12,8 @@ The MTC1 exercise models the current TC1B-tested single-level TC/CRP span bounda
 
 The merged MTC1 implementation documentation remains authoritative for current model details and deferred behavior.
 
+The preserved workflow/checkpoint set contains **30 documents**: Steps 1-28 plus the Step 21A and Step 28A review/corrective checkpoints.
+
 ## Reading order
 
 1. [`01-environment-and-function-shell.md`](01-environment-and-function-shell.md)
@@ -42,6 +44,8 @@ The merged MTC1 implementation documentation remains authoritative for current m
 26. [`25-paired-demo-assertions.md`](25-paired-demo-assertions.md)
 27. [`26-environment-and-pre-staging-capture.md`](26-environment-and-pre-staging-capture.md)
 28. [`27-final-source-review-and-staging-prep.md`](27-final-source-review-and-staging-prep.md)
+29. [`28-scoped-staging-and-whitespace-gates.md`](28-scoped-staging-and-whitespace-gates.md)
+30. [`28a-scoped-staging-retry.md`](28a-scoped-staging-retry.md) - corrective checkpoint after the initial scoped staging attempt left the index empty.
 
 ## Related decision-support briefing
 
