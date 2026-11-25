@@ -15,7 +15,9 @@
 //   - LEDs show a compact status/result view rather than a full trace.
 // -----------------------------------------------------------------------------
 
-module top_mmu_demo (
+module top_mmu_demo #(
+  parameter integer SETTLE_BITS = 20
+) (
   input  wire        clk,
   input  wire        btnC,
   input  wire [15:0] sw,
@@ -30,7 +32,6 @@ module top_mmu_demo (
   localparam integer STATUS_WIDTH   = 8;
   localparam integer CMD_WIDTH      = 3;
   localparam integer RESP_FAULT_W   = 3;
-  localparam integer SETTLE_BITS    = 20;
 
   localparam [3:0] REG_CRP          = 4'h0;
   localparam [3:0] REG_TC           = 4'h2;
@@ -48,7 +49,7 @@ module top_mmu_demo (
   localparam [1:0] MODE_FLUSH_MATCH = 2'b11;
 
   localparam [PA_WIDTH-1:0] TABLE_BASE_ADDR  = 24'h001000;
-  localparam [31:0]         TC_DEMO_VALUE    = 32'h00000FFF;
+  localparam [31:0]         TC_DEMO_VALUE    = 32'h8000_0FFF;
   localparam [31:0]         TT0_DEMO_VALUE   = 32'hF000F800;
   localparam [31:0]         TT1_DEMO_VALUE   = 32'h00000000;
 

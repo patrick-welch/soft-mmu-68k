@@ -2,17 +2,12 @@
 
 ## Purpose
 
-This is a repo-local TC / CRP / SRP traversal semantics test/spec document for
-SM68861.
-
-It does not implement RTL. It does not add executable tests. It does not add
-MATLAB vectors. It does not claim full Motorola PMMU compatibility.
-
-The purpose of this plan is to define future test expectations for traversal
-behavior before executable tests or RTL changes attempt to expand the current
-walker. The plan separates current implemented behavior from future
-Motorola-aligned targets so later packets can work from a reviewed local
-semantics surface.
+TC1A originally proposed tests for TC, CRP and SRP. The current sections
+below describe the integrated SM68861 through TCE1. The stage proposals,
+test matrix, non-goals and verification checklist beginning at
+[Descriptor Traversal Model Candidates](#descriptor-traversal-model-candidates)
+record TC1A's planning history. For the tests that exercise TCE1, see
+[TCE1 regression and model coverage](#tce1-regression-and-model-coverage).
 
 ## Current Implemented Subset
 
@@ -22,11 +17,12 @@ The current implementation is first-pass and deliberately limited.
   images.
 - `mmu_top` wires the relevant register state into the integrated path.
 - `CRP` is currently passed to the walker as the table base.
-- `TC` currently contributes a limited table-entry span/configuration role by
-  feeding the walker `table_entries_i` input from the low VPN-width portion of
-  the `TC` image.
+- `TC[31]` (E) enables the existing TT/TLB/walker path. The walker takes
+  its project-local span from the low `min(VPN_WIDTH, 31)` bits of TC,
+  zero-extended to `VPN_WIDTH` when needed.
 - The current walker behavior is minimal and single-level.
-- The current walker issues one descriptor read per miss.
+- An in-range miss issues one descriptor read. An out-of-range miss faults
+  before issuing a read.
 - The current default descriptor boundary is the 64-bit long-format page
   descriptor subset after D2.
 - The current live walker does not perform full root/pointer traversal.
@@ -64,8 +60,8 @@ architectural proof.
 
 | Term | Project-local meaning |
 | --- | --- |
-| Translation Control register | The software-visible register image stored by `mmu_regs` as `tc`. Current RTL uses part of this image as a table-entry span input; full Motorola field interpretation is deferred. |
-| TC | Short name for the Translation Control register image. In current traversal, the low VPN-width bits become `table_entries_cfg` for the single-level walker. |
+| Translation Control register | The register image stored by `mmu_regs` as `tc`. Bit 31 controls translation. The low bits supply the current single-level table span. |
+| TC | Short name for the Translation Control register. The walker takes its span from the low bits below E, up to the VPN width. |
 | Current Root Pointer | The software-visible root pointer image stored by `mmu_regs` as `crp`. In the current integrated path, it feeds the walker's table base. |
 | CRP | Short name for the Current Root Pointer register image. Current live traversal treats it as a table base, not as a fully decoded Motorola root-pointer descriptor tree. |
 | Supervisor Root Pointer | The software-visible root pointer image stored by `mmu_regs` as `srp`. Current RTL stores and exposes it, but does not use it for live root selection. |
@@ -83,7 +79,7 @@ architectural proof.
 | descriptor-tree traversal | A future traversal model that starts at a selected root and follows descriptor levels until a page mapping or terminal fault is reached. |
 | root selection | The policy that decides whether a request uses CRP, SRP, or another root source based on access class and TC/root state. Current live RTL does not implement SRP selection. |
 | function-code-qualified access | An access classified by `FC[2:0]` through `mmu_decode`, including user/supervisor and program/data distinctions for normal memory classes. |
-| current subset | The implemented and tested first-pass repo behavior: TT/TTR qualification, TLB lookup, single-level long-format page descriptor walk, refill, and permission after translation. |
+| current subset | With E clear the CPU address passes through. With E set the request can use TT/TTR, the TLB, a single-level walk and translated permission checks. |
 | future Motorola-aligned target | A future explicitly scoped target that may add more Motorola-aligned TC fields, root selection, descriptor traversal, and status behavior after tests specify the expected subset. |
 
 ## Current Register Role Table
@@ -92,14 +88,46 @@ architectural proof.
 | --- | --- | --- | --- | --- |
 | CRP | Software-visible current root pointer image in `mmu_regs`. | Feeds the walker table base in the live `mmu_top` subset. | Should CRP remain a simple base for Stage 1, or become a source for root descriptor traversal in later stages? | Current behavior is table-base use, not complete root descriptor semantics. |
 | SRP | Software-visible supervisor root pointer image in `mmu_regs`. | No live root-selection effect is visible in current RTL. | When should supervisor accesses select SRP, and how should unsupported SRP use behave? | Current SRP storage must not be mistaken for implemented supervisor traversal. |
-| TC | Software-visible 32-bit Translation Control image. | Low VPN-width bits feed `table_entries_cfg`; the walker treats that as a table span. | Which TC concepts should control enable, page size, address partition, levels, limit checks, and root selection? | Current behavior is a narrow configuration/span role only. |
+| TC | Software-visible 32-bit Translation Control image. | Bit 31 enables translation. Writing it clear flushes the TLB. Low bits set the walker span. | How should page size, address partition, levels, limit checks, and root selection be implemented? | MTC1 models the span calculation in isolation. |
 | TT0 | Transparent-translation register image. | TT qualification occurs before TLB/walker use. | Covered by TTR1, not expanded here. | TC1A should only preserve the ordering relationship. |
 | TT1 | Transparent-translation register image. | TT qualification occurs before TLB/walker use. | Covered by TTR1, not expanded here. | CPU/special and reserved FC TT behavior belongs to TTR1/FC follow-up work. |
 | MMUSR | Software-visible MMU status image. | No current hardware traversal producer updates the MMUSR image. | How should future traversal results map to MMUSR/PTEST status? | Covered by M1 and future mapper work; do not implement here. |
 
 ## Current Live Traversal Model
 
-The current live traversal model is:
+### Translation disabled
+
+Reset clears `TC.E` (bit 31). Each accepted CPU memory request returns its
+logical address truncated or zero-extended to the physical port width.
+The response has no hit or fault, and issues no descriptor read. The address
+port models no CPU-space strobes or coprocessor-register cycles.
+
+Every TC write with E clear invalidates all TLB entries. Any TC write holds
+`req_ready_o` low for that cycle, so a held CPU request sees the new TC.
+A CPU access that already started a walk still receives exactly one response.
+If disable intervenes, the walk cannot refill the TLB, even if E is set again
+before the descriptor returns.
+
+A disabled local probe reports a miss. A disabled preload acknowledges
+without starting a walk or allocating an entry. Preload status acknowledges
+the local ready/valid handshake. It does not report a completed descriptor
+walk. A command accepted on the TC write edge sees the new E. A probe or
+preload accepted while disabled, or still queued when a disable arrives,
+stays ineligible for lookup across a subsequent enable.
+
+Motorola describes address pass-through and ATC invalidation in the
+[MC68851 User's Manual, third edition, §§6.1.3–6.1.3.1](https://www.bitsavers.org/components/motorola/68000/68020/MC68851_PMMU_Users_Manual_3ed_1988.pdf).
+The register port accepts raw TC values. Motorola's configuration checks,
+disable-before-reprogramming rule, and instruction-level exceptions for
+disabled PTEST/PLOAD require additional implementation.
+
+### Translation enabled
+
+Setting E allows the existing request path below. Raw TC writes that keep E
+set preserve cached entries, including when the local span changes. The
+Basys 3 demo writes `0x80000FFF` to enable this path with a span of
+`0xFFF` entries. This project-local encoding carries no claim of a legal
+MC68851 page geometry.
 
 1. A request arrives through `mmu_top` with virtual address, function code,
    read/write intent, and fetch intent.
@@ -126,18 +154,42 @@ The current live traversal model is:
     successful walk.
 17. The walker does not traverse root or pointer descriptor levels.
 
-This model is useful and tested, but it is not a complete TC/CRP/SRP traversal
-model.
+### TCE1 regression and model coverage
+
+The core regression checks reset access, disabled commands, TC-write
+ordering, a cached hit across an E-set write, and a delayed CPU response
+across disable/re-enable. The board-top regression checks the four HW1B
+switch/LED pairs in simulation. HDL Regression #95 ran both benches on
+the original TCE1 submission.
+[Core bench](../../tb/integ/mmu_core_tb.sv) ·
+[Board-top bench](../../tb/integ/basys3_mmu_demo_tb.sv) ·
+[CI log](https://github.com/patrick-welch/soft-mmu-68k/actions/runs/45520931436/job/138892280910)
+
+MTC1 models the pre-walk decision in isolation. It assumes a request has
+reached the walker and does not model the integrated enable gate. At
+`VPN_WIDTH=32` its mask includes the entire TC register. For
+`TC=0x80000006` MTC1 derives a span of `0x80000006`. The RTL excludes E
+and derives `0x00000006`. On a translated miss for VPN 6 the model
+predicts a descriptor read while the RTL reports unmapped before
+reading memory. At narrower supported widths, both span masks exclude E.
+[MTC1 span model](../../scripts/matlab/models/mmu_tc_crp_span_reference.m) ·
+[RTL span extraction](../../rtl/core/mmu_top.v)
+
+The `mmu_top` tutorial and the Wiki pages on translation flow, registers
+and control operations still describe the earlier path. Follow-up work
+includes updating their RTL examples, gap A1-G03, the verification plan
+and the spec-to-module crosswalk, and checking the MTC1 width-32 case.
+[Documentation review](https://github.com/patrick-welch/soft-mmu-68k/pull/49#issuecomment-7151515249)
 
 ## TC Field Interpretation Inventory
 
 | TC-related concept | Current repo behavior | Known gap | Future test/spec question | Notes |
 | --- | --- | --- | --- | --- |
-| translation enable / disabled state | `TC` resets to zero. Current live traversal does not fully implement Motorola enable/disable semantics; zero table entries make walker misses fail the current span check. | No complete architectural enable/disable model. | Should disabled translation bypass, fault, or preserve current local behavior for a staged subset? | Do not infer full enable semantics from reset comments alone. |
+| translation enable / disabled state | Reset clears TC.E. With E clear the CPU port passes addresses through. A TC write with E clear flushes the entire TLB. | Coprocessor exceptions and TC consistency checks are deferred. | How should these be reported through a future CPU interface? | With E set, a zero span still faults a walker miss before any descriptor read. |
 | page size / page offset width | `PAGE_SHIFT` is an RTL parameter, not a decoded TC field. | TC-driven page size is not implemented. | Should TC later select page size, and which page sizes are in scope? | Current benches may use small page shifts for simulation. |
 | table index partitioning | Current walker uses the full VPN as a single index. | No TC-driven split into multiple indexes. | How should TC partition virtual address bits among root, pointer, and page levels? | Phrase future work as concepts unless field names are confirmed in-source. |
 | number of levels | Current walker is single-level. | No live multi-level traversal. | Which TC concepts should select one-level, two-level, or broader traversal in future packets? | Stage 1 should stay single-level. |
-| table-entry span / table_entries | `mmu_top` derives `table_entries_cfg` from low VPN-width TC bits and feeds the walker. | Span is not a complete Motorola limit interpretation. | What exact in-range and out-of-range cases should executable tests lock down first? | Current `start_vpn >= table_entries_i` reports unmapped. |
+| table-entry span / table_entries | The low `min(VPN_WIDTH, 31)` TC bits supply the span, zero-extended to the walker's VPN width. | Span is not a complete Motorola limit interpretation. | What exact in-range and out-of-range cases should executable tests lock down first? | Current `start_vpn >= table_entries_i` reports unmapped. |
 | root pointer selection | Current live walker uses CRP as table base. | SRP and FC-based root selection are not implemented. | Which FC classes should select CRP, SRP, or an unsupported/deferred path? | Preserve current CRP behavior until tests specify a change. |
 | root descriptor interpretation | `descriptor_pack` models a root descriptor subset. | Live walker does not consume root descriptors. | When should a selected root pointer lead to root descriptor fetch/validation? | Format coverage is not traversal coverage. |
 | pointer descriptor interpretation | `descriptor_pack` models a pointer descriptor subset. | Live walker treats non-page descriptor types as unmapped. | Which pointer descriptor types should cause a next-level fetch in Stage 2? | Current non-page handling must remain clear for Stage 0/1 tests. |
@@ -187,7 +239,7 @@ pinning down TC/span/root expectations.
 
 ## Future Executable Test Matrix
 
-These are future executable test targets only. This packet adds no tests.
+TC1A proposed the following targets before TC1B and TCE1 added executable tests.
 
 | Test target | Current expected behavior | Future expected behavior question | Likely bench | Notes |
 | --- | --- | --- | --- | --- |
@@ -268,7 +320,7 @@ and RTL expansion without explicit approval.
 
 ## Non-Goals
 
-This packet has these explicit non-goals:
+The original TC1A planning packet recorded these non-goals.
 
 - no RTL edits
 - no executable testbench edits
@@ -306,7 +358,7 @@ that fails loudly on missing, malformed, or mismatched rows.
 
 ## Verification for This Packet
 
-Before committing this documentation-only packet, verify:
+TC1A used the following documentation-only checklist.
 
 ```powershell
 git status --short --branch
@@ -315,7 +367,7 @@ git diff --stat
 git diff -- soft-mmu-68k/docs/design/tc_crp_srp_traversal_plan.md
 ```
 
-HDL scripts may be skipped with this exact reason:
+The recorded skip reason applied to TC1A.
 
 ```text
 SKIPPED: documentation-only packet

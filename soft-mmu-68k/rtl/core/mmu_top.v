@@ -15,6 +15,7 @@
 //
 // Packet scope:
 //   - Single outstanding translation request.
+//   - TC.E clear: direct CPU address pass-through (MC68851 manual, sec. 6.1.3.1).
 //   - Lookup direct-mapped TLB first.
 //   - On miss, perform a minimal walker-backed refill.
 //   - On permission failure, return a fault without modeling full bus timing.
@@ -96,6 +97,7 @@ module mmu_top #(
   localparam integer VPN_WIDTH = VA_WIDTH - PAGE_SHIFT;
   localparam integer TTR_KEY_WIDTH = (VA_WIDTH >= 8) ? 8 : VA_WIDTH;
   localparam integer STATUS_BIT_TT_MATCH = STATUS_WIDTH - 1;
+  localparam [3:0] REG_TC = 4'h2;
 
   localparam [1:0] ST_IDLE       = 2'd0;
   localparam [1:0] ST_START_WALK = 2'd1;
@@ -112,10 +114,12 @@ module mmu_top #(
   reg [FC_WIDTH-1:0] pending_fc_q;
   reg                pending_rw_q;
   reg                pending_fetch_q;
+  reg                discard_refill_q;
 
   reg                probe_pending_q;
   reg [VA_WIDTH-1:0] probe_addr_q;
   reg [FC_WIDTH-1:0] probe_fc_q;
+  reg                cmd_can_translate_q;
 
   wire [PA_WIDTH-1:0] crp_q;
   wire [PA_WIDTH-1:0] srp_q;
@@ -147,15 +151,20 @@ module mmu_top #(
 
   wire state_idle = (state_q == ST_IDLE);
   wire walker_start = (state_q == ST_START_WALK);
+  wire translation_enabled = tc_q[31];
+  wire tc_write = reg_wr_en_i && (reg_addr_i == REG_TC);
+  wire tc_disable_write = tc_write && !reg_wr_data_i[31];
 
-  wire preload_accept = state_idle && !req_valid_i && !probe_pending_q;
+  // A TC write takes effect before a new CPU request or command lookup.
+  wire preload_accept = req_ready_o && !req_valid_i && !probe_pending_q;
 
-  wire lookup_src_cpu     = state_idle && req_valid_i;
-  wire lookup_src_probe   = !lookup_src_cpu && probe_pending_q;
-  wire lookup_src_preload = !lookup_src_cpu && !lookup_src_probe &&
-                            preload_req_valid && preload_accept;
+  wire lookup_src_cpu     = req_ready_o && req_valid_i;
+  wire lookup_src_probe   = !tc_write && !lookup_src_cpu && probe_pending_q;
+  wire lookup_src_preload = preload_req_valid && preload_accept;
 
-  wire lookup_valid = lookup_src_cpu || lookup_src_probe || lookup_src_preload;
+  wire lookup_valid = translation_enabled &&
+                      (lookup_src_cpu || (cmd_can_translate_q &&
+                                          (lookup_src_probe || lookup_src_preload)));
   wire [VA_WIDTH-1:0] lookup_va = lookup_src_cpu     ? req_va_i :
                                   lookup_src_probe   ? probe_addr_q :
                                   lookup_src_preload ? preload_req_addr :
@@ -192,8 +201,7 @@ module mmu_top #(
   wire                tt0_match;
   wire                tt1_match;
   wire                tt_match_any;
-  wire [PA_WIDTH-1:0] tt_lookup_pa;
-  wire                tt_cpu_bypass;
+  wire                cpu_bypass;
 
   function automatic [2:0] user_perm_from_attr(
     input [ATTR_WIDTH-1:0] attr_i
@@ -270,10 +278,10 @@ module mmu_top #(
   /* verilator lint_on UNUSED */
 
   generate
-    if (VPN_WIDTH <= 32) begin : gen_table_entries_narrow
+    if (VPN_WIDTH <= 31) begin : gen_table_entries_narrow
       assign table_entries_cfg = tc_q[VPN_WIDTH-1:0];
     end else begin : gen_table_entries_wide
-      assign table_entries_cfg = {{(VPN_WIDTH-32){1'b0}}, tc_q};
+      assign table_entries_cfg = {{(VPN_WIDTH-31){1'b0}}, tc_q[30:0]};
     end
 
     if (STATUS_WIDTH >= ATTR_WIDTH) begin : gen_probe_status_wide
@@ -289,7 +297,7 @@ module mmu_top #(
     end
   endgenerate
 
-  assign req_ready_o = state_idle;
+  assign req_ready_o = state_idle && !tc_write;
   assign busy_o      = !state_idle || walker_busy || cmd_busy_o;
 
   mmu_regs #(
@@ -331,9 +339,8 @@ module mmu_top #(
                      ttr_match(tt1_q, lookup_va, decode_is_user,
                                decode_is_program, decode_is_data,
                                decode_cpu_space);
-  assign tt_match_any  = tt0_match | tt1_match;
-  assign tt_lookup_pa  = va_to_pa(lookup_va);
-  assign tt_cpu_bypass = lookup_src_cpu && tt_match_any;
+  assign tt_match_any = tt0_match | tt1_match;
+  assign cpu_bypass = lookup_src_cpu && (!translation_enabled || tt_match_any);
 
   perm_check u_hit_perm (
     .req_r    (lookup_src_cpu && !req_fetch_i && req_rw_i),
@@ -342,7 +349,7 @@ module mmu_top #(
     .is_user  (decode_is_user),
     .u_perm   (hit_user_perm),
     .s_perm   (hit_super_perm),
-    .tt_bypass(tt_cpu_bypass),
+    .tt_bypass(cpu_bypass),
     .allow    (hit_perm_allow),
     .fault    (hit_perm_fault)
   );
@@ -376,12 +383,12 @@ module mmu_top #(
     .lookup_miss_o     (tlb_lookup_miss),
     .lookup_pa_o       (tlb_lookup_pa),
     .lookup_attr_o     (tlb_lookup_attr),
-    .refill_valid_i    (walker_refill_valid),
+    .refill_valid_i    (walker_refill_valid && !discard_refill_q),
     .refill_va_i       (walker_refill_va),
     .refill_pa_i       (walker_pa_base),
     .refill_fc_i       (pending_fc_q),
     .refill_attr_i     (walker_attr),
-    .invalidate_all_i  (flush_all),
+    .invalidate_all_i  (flush_all || tc_disable_write),
     .invalidate_match_i(flush_match),
     .invalidate_va_i   (flush_addr),
     .invalidate_fc_i   (flush_fc)
@@ -447,7 +454,7 @@ module mmu_top #(
     .probe_req_valid_o  (probe_req_valid),
     .probe_addr_o       (probe_req_addr),
     .probe_fc_o         (probe_req_fc),
-    .probe_resp_valid_i (probe_pending_q),
+    .probe_resp_valid_i (lookup_src_probe),
     .probe_resp_hit_i   (tlb_lookup_hit),
     .probe_resp_pa_i    (tlb_lookup_pa),
     .probe_resp_status_i(probe_status_bits),
@@ -480,9 +487,11 @@ module mmu_top #(
       pending_fc_q        <= {FC_WIDTH{1'b0}};
       pending_rw_q        <= 1'b0;
       pending_fetch_q     <= 1'b0;
+      discard_refill_q    <= 1'b0;
       probe_pending_q     <= 1'b0;
       probe_addr_q        <= {VA_WIDTH{1'b0}};
       probe_fc_q          <= {FC_WIDTH{1'b0}};
+      cmd_can_translate_q <= 1'b0;
       resp_valid_o        <= 1'b0;
       resp_pa_o           <= {PA_WIDTH{1'b0}};
       resp_hit_o          <= 1'b0;
@@ -496,7 +505,24 @@ module mmu_top #(
       resp_fault_code_o <= RESP_FAULT_NONE;
       resp_perm_fault_o <= 5'b0;
 
-      if (probe_pending_q) begin
+      // An accepted walk still owes its response. A disable write flushes
+      // the TLB now and prevents that walk from repopulating it later, even
+      // if software re-enables translation before descriptor memory replies.
+      if (state_idle) begin
+        discard_refill_q <= 1'b0;
+      end else if (tc_disable_write) begin
+        discard_refill_q <= 1'b1;
+      end
+
+      // Probe/preload may wait for the shared lookup port. A command accepted
+      // while disabled, or invalidated while queued, cannot start a later walk.
+      if (tc_disable_write) begin
+        cmd_can_translate_q <= 1'b0;
+      end else if (cmd_valid_i && cmd_ready_o) begin
+        cmd_can_translate_q <= tc_write ? reg_wr_data_i[31] : translation_enabled;
+      end
+
+      if (lookup_src_probe) begin
         probe_pending_q <= 1'b0;
       end
 
@@ -509,9 +535,9 @@ module mmu_top #(
       case (state_q)
         ST_IDLE: begin
           if (lookup_src_cpu) begin
-            if (tt_match_any) begin
+            if (cpu_bypass) begin
               resp_valid_o <= 1'b1;
-              resp_pa_o    <= tt_lookup_pa;
+              resp_pa_o    <= va_to_pa(req_va_i);
             end else if (tlb_lookup_hit) begin
               resp_valid_o <= 1'b1;
               resp_pa_o    <= tlb_lookup_pa;

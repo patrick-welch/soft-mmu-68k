@@ -42,6 +42,11 @@ run_bench "mmu_core_tb" "/tmp/mmu_core_tb" \
   tb/integ/mmu_core_tb.sv \
   rtl/core/mmu_top.v
 
+run_bench "basys3_mmu_demo_tb" "/tmp/basys3_mmu_demo_tb" \
+  -s basys3_mmu_demo_tb -y rtl/core \
+  tb/integ/basys3_mmu_demo_tb.sv \
+  fpga/basys3/tops/top_mmu_demo.v
+
 run_bench "if_68k_shim_tb" "/tmp/if_68k_shim_tb" \
   tb/integ/if_68k_shim_tb.sv \
   rtl/bus/if_68k_shim.v
