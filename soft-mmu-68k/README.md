@@ -29,6 +29,11 @@ Implemented now:
   bus shims.
 - `P8/P8b`: `mmu_top` integration, direct-mapped lookup/refill path, and a
   first-pass `TT0/TT1` qualification path ahead of the translated flow.
+- `TCE1`: after reset an ordinary CPU fetch, read, or write returns its
+  logical address directly, without a descriptor fetch or permission fault.
+  Set `TC[31]` to use the existing single-level walker. Writing TC with bit 31
+  clear flushes the TLB and prevents an outstanding walk from restoring a
+  stale entry.
 - `P9a/P9b`: shared testbench helpers and a stronger integration bench.
 - `P10a/P10b`: freestanding 68k software-side validation scaffold for TT,
   permissions, and translated-vs-transparent maintenance behavior.
@@ -175,7 +180,7 @@ make -f sw/build/Makefile all \
 
 On reset, `fpga/basys3/tops/top_mmu_demo.v` programs:
 - `CRP = 0x001000`
-- `TC = 0x00000FFF`
+- `TC = 0x80000FFF` (translation enabled, project-local span of `0xFFF` entries)
 - `TT0 = 0xF000F800`
 - `TT1 = 0x00000000`
 

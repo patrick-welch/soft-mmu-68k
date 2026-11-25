@@ -8,6 +8,7 @@
 //   - MC68851 PMMU User's Manual, Section 4 "Address Translation Tables"
 //   - MC68851 PMMU User's Manual, Section 4 "Page Descriptors"
 //   - MC68851 PMMU User's Manual, Section 5.2 "Address Translation Cache"
+//   - MC68851 PMMU User's Manual, Sections 6.1.3 and 6.1.3.1 (TC.E)
 //   - MC68030 User's Manual, Section 9 "Memory Management Unit"
 //   - M68000 Family Programmer's Reference Manual, instruction entries
 //     "PLOAD", "PFLUSH", "PFLUSHA", and "PTEST"
@@ -62,7 +63,9 @@ module mmu_core_tb;
   localparam logic [VA_WIDTH-1:0] VA_TC_OUT_OF_RANGE = 16'h0634;
   localparam logic [VA_WIDTH-1:0] VA_SRP_INERT = 16'h0734;
   localparam logic [FC_WIDTH-1:0] FC_USER_DATA = 3'b001;
+  localparam logic [FC_WIDTH-1:0] FC_USER_PROGRAM = 3'b010;
   localparam logic [FC_WIDTH-1:0] FC_SUPER_DATA = 3'b101;
+  localparam logic [FC_WIDTH-1:0] FC_SUPER_PROGRAM = 3'b110;
   localparam logic [FC_WIDTH-1:0] FC_CPU_SPACE = 3'b111;
   localparam logic [PA_WIDTH-1:0] TABLE_BASE = 16'h0200;
   localparam logic [PA_WIDTH-1:0] ALT_TABLE_BASE = 16'h0600;
@@ -118,6 +121,14 @@ module mmu_core_tb;
   logic [PA_WIDTH-1:0]     last_walk_req_addr;
   integer                  walk_req_count;
   integer                  walk_req_count_before;
+  integer                  cpu_req_count;
+  integer                  cpu_resp_count;
+  integer                  cmd_req_count;
+  integer                  cmd_status_count;
+  logic                    hold_mem_response;
+  logic                    delayed_response_pending;
+  logic [DESCR_WIDTH-1:0]  delayed_descriptor;
+  logic                    delayed_error;
   logic [31:0]             mmusr_before;
   logic [31:0]             mmusr_after;
   /* verilator lint_off UNUSED */
@@ -193,17 +204,40 @@ module mmu_core_tb;
     if (!rst_n) begin
       walk_req_count     <= 0;
       last_walk_req_addr <= '0;
-    end else if (walk_mem_req_valid) begin
-      walk_req_count     <= walk_req_count + 1;
-      last_walk_req_addr <= walk_mem_req_addr;
+      cpu_req_count      <= 0;
+      cpu_resp_count     <= 0;
+      cmd_req_count      <= 0;
+      cmd_status_count   <= 0;
+      delayed_response_pending <= 1'b0;
+    end else begin
+      if (req_valid && req_ready)
+        cpu_req_count <= cpu_req_count + 1;
+      if (resp_valid)
+        cpu_resp_count <= cpu_resp_count + 1;
+      if (cmd_valid && cmd_ready)
+        cmd_req_count <= cmd_req_count + 1;
+      if (status_valid)
+        cmd_status_count <= cmd_status_count + 1;
+      if (!hold_mem_response)
+        delayed_response_pending <= 1'b0;
+      if (walk_mem_req_valid) begin
+        walk_req_count     <= walk_req_count + 1;
+        last_walk_req_addr <= walk_mem_req_addr;
+        if (hold_mem_response) begin
+          delayed_response_pending <= 1'b1;
+          delayed_descriptor       <= mem_desc[mem_word_index];
+          delayed_error            <= mem_err[mem_word_index];
+        end
+      end
     end
   end
 
   assign mem_req_offset     = walk_mem_req_addr - expected_table_base;
   assign mem_word_index     = mem_req_offset[VPN_WIDTH+DESCR_SHIFT-1:DESCR_SHIFT];
-  assign walk_mem_resp_valid = walk_mem_req_valid;
-  assign walk_mem_resp_data  = mem_desc[mem_word_index];
-  assign walk_mem_resp_err   = walk_mem_req_valid && mem_err[mem_word_index];
+  assign walk_mem_resp_valid = !hold_mem_response && (delayed_response_pending || walk_mem_req_valid);
+  assign walk_mem_resp_data  = delayed_response_pending ? delayed_descriptor : mem_desc[mem_word_index];
+  assign walk_mem_resp_err   = walk_mem_resp_valid &&
+                               (delayed_response_pending ? delayed_error : mem_err[mem_word_index]);
 
   function automatic [DESCR_WIDTH-1:0] make_page_desc(
     input logic [1:0]            dt_i,
@@ -275,6 +309,7 @@ module mmu_core_tb;
       cmd_op      = TB_CMD_NOP;
       cmd_addr    = '0;
       cmd_fc      = '0;
+      hold_mem_response = 1'b0;
       expected_table_base = TABLE_BASE;
     end
   endtask
@@ -298,11 +333,12 @@ module mmu_core_tb;
       reg_addr    = addr_i;
       reg_wr_data = data_i;
       /* verilator lint_off STMTDLY */
-      #10;
-      /* verilator lint_on STMTDLY */
+      #9;
       reg_wr_en   = 1'b0;
       reg_addr    = '0;
       reg_wr_data = '0;
+      #1; // Allow combinational request-ready to settle after the TC write.
+      /* verilator lint_on STMTDLY */
     end
   endtask
 
@@ -406,6 +442,43 @@ module mmu_core_tb;
     end
   endtask
 
+  task automatic check_identity_access(
+    input logic [VA_WIDTH-1:0] va_i,
+    input logic [FC_WIDTH-1:0] fc_i,
+    input logic                rw_i,
+    input logic                fetch_i
+  );
+    integer reads_before;
+    begin
+      reads_before = walk_req_count;
+      cpu_request(va_i, fc_i, rw_i, fetch_i);
+      wait_for_resp();
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear returns the logical address", va_i, resp_pa)
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear reports no TLB hit", 1'b0, resp_hit)
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear reports no fault", 1'b0, resp_fault)
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear returns no fault code", TB_RESP_FAULT_NONE, resp_fault_code)
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear returns no permission fault bits", 5'b0, resp_perm_fault)
+      `TB_FATAL_IF_NOT_EQUAL("TC.E clear uses no descriptors", reads_before, walk_req_count)
+    end
+  endtask
+
+  task automatic check_enabled_read(
+    input logic [VA_WIDTH-1:0] va_i,
+    input logic [PA_WIDTH-1:0] pa_i,
+    input logic                expect_hit_i
+  );
+    integer reads_before;
+    begin
+      reads_before = walk_req_count;
+      cpu_request(va_i, FC_USER_DATA, 1'b1, 1'b0);
+      wait_for_resp();
+      `TB_FATAL_IF_NOT_EQUAL("enabled read PA", pa_i, resp_pa)
+      `TB_FATAL_IF_NOT_EQUAL("enabled read succeeds", 1'b0, resp_fault)
+      `TB_FATAL_IF_NOT_EQUAL("enabled read hit flag", expect_hit_i, resp_hit)
+      `TB_FATAL_IF_NOT_EQUAL("enabled read descriptor count", reads_before + (expect_hit_i ? 0 : 1), walk_req_count)
+    end
+  endtask
+
   initial begin
     clear_inputs();
     clear_memory();
@@ -433,8 +506,14 @@ module mmu_core_tb;
     #10;
     /* verilator lint_on STMTDLY */
 
+    // Reset firmware can fetch code and access data before any table setup.
+    check_identity_access(VA_INVALID, FC_SUPER_PROGRAM, 1'b1, 1'b1);
+    check_identity_access(VA_FAULT, FC_USER_PROGRAM, 1'b1, 1'b1);
+    check_identity_access(VA_PERM, FC_USER_DATA, 1'b0, 1'b0);
+    check_identity_access(VA_UNMAPPED, FC_SUPER_DATA, 1'b1, 1'b0);
+
     reg_write(4'h0, {16'h0000, TABLE_BASE});
-    reg_write(4'h2, 32'h0000_0080);
+    reg_write(4'h2, 32'h8000_0080);
     reg_write(4'h3, 32'h0000_0000);
     reg_write(4'h4, 32'h0000_0000);
     reg_write(4'h5, 32'h0000_A00F);
@@ -455,6 +534,8 @@ module mmu_core_tb;
     expected_table_base = TABLE_BASE;
     reg_write(4'h0, {16'h0000, TABLE_BASE});
     reg_write(4'h2, 32'h0000_0006);
+    check_identity_access(VA_TC_IN_RANGE, FC_USER_DATA, 1'b1, 1'b0);
+    reg_write(4'h2, 32'h8000_0006);
     walk_req_count_before = walk_req_count;
     cpu_request(VA_TC_IN_RANGE, FC_USER_DATA, 1'b1, 1'b0);
     wait_for_resp();
@@ -472,7 +553,93 @@ module mmu_core_tb;
     `TB_FATAL_IF_TRUE("TC span first out-of-range does not report hit", resp_hit)
     `TB_FATAL_IF_NOT_EQUAL("TC span first out-of-range issues no descriptor request", walk_req_count_before, walk_req_count)
 
-    reg_write(4'h2, 32'h0000_0080);
+    // Populate two different TLB indices. Hold an ordinary CPU request valid
+    // across a disabling write and accept it on the first ready edge afterward.
+    check_enabled_read(VA_TC_IN_RANGE, 16'h9534, 1'b1);
+    mem_desc[VA_CRP_ALT[VA_WIDTH-1:PAGE_SHIFT]][34] = 1'b1; // Write protect.
+    check_enabled_read(VA_CRP_ALT, 16'h9434, 1'b0);
+    cpu_request(VA_CRP_ALT, FC_USER_DATA, 1'b0, 1'b0);
+    wait_for_resp();
+    `TB_FATAL_IF_NOT_EQUAL("enabled write hits protected mapping", 1'b1, resp_hit)
+    `TB_FATAL_IF_NOT_EQUAL("enabled write to protected mapping faults", TB_RESP_FAULT_PERM, resp_fault_code)
+    req_valid = 1'b1;
+    req_va    = VA_TC_IN_RANGE;
+    req_fc    = FC_USER_DATA;
+    reg_wr_en = 1'b1;
+    reg_addr = 4'h2;
+    reg_wr_data = 32'h0000_0006;
+    /* verilator lint_off STMTDLY */
+    #1;
+    `TB_FATAL_IF_NOT_EQUAL("TC write takes priority over a CPU request", 1'b0, req_ready)
+    #8;
+    reg_wr_en = 1'b0;
+    #1;
+    /* verilator lint_on STMTDLY */
+    `TB_FATAL_IF_NOT_EQUAL("backpressured request has no early response", 1'b0, resp_valid)
+    check_identity_access(VA_TC_IN_RANGE, FC_USER_DATA, 1'b1, 1'b0);
+    check_identity_access(VA_CRP_ALT, FC_USER_DATA, 1'b0, 1'b0);
+
+    // The command shim acknowledges a disabled preload and probe without
+    // fetching a descriptor or reporting a translated or transparent hit.
+    walk_req_count_before = walk_req_count;
+    command_issue(TB_CMD_PRELOAD, VA_TC_IN_RANGE, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("disabled preload acknowledged", TB_CMD_PRELOAD, status_cmd)
+    wait_until_idle();
+    command_issue(TB_CMD_PROBE, VA_TC_IN_RANGE, FC_USER_DATA);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("disabled probe acknowledged", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_NOT_EQUAL("disabled probe misses", 1'b0, status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("disabled probe has no status attributes", '0, status_bits)
+    `TB_FATAL_IF_NOT_EQUAL("disabled commands use no descriptors", walk_req_count_before, walk_req_count)
+
+    mem_desc[VA_TC_IN_RANGE[VA_WIDTH-1:PAGE_SHIFT]][PAGE_SHIFT +: PFN_WIDTH] = 8'hB5;
+    // The preload was accepted while disabled. Re-enabling at the next edge
+    // must not retroactively start a walk or make the first CPU access a hit.
+    command_issue(TB_CMD_PRELOAD, VA_TC_IN_RANGE, FC_USER_DATA);
+    reg_write(4'h2, 32'h8000_0006);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("pre-enable preload acknowledged", TB_CMD_PRELOAD, status_cmd)
+    wait_until_idle();
+    `TB_FATAL_IF_NOT_EQUAL("pre-enable preload uses no descriptors", walk_req_count_before, walk_req_count)
+    check_enabled_read(VA_TC_IN_RANGE, 16'hB534, 1'b0);
+    check_enabled_read(VA_TC_IN_RANGE, 16'hB534, 1'b1);
+
+    // Memory captures the old descriptor, then returns it after TC is disabled
+    // and re-enabled. It still answers the accepted read but cannot refill it.
+    hold_mem_response = 1'b1;
+    walk_req_count_before = walk_req_count;
+    cpu_request(VA_CRP_ALT, FC_USER_DATA, 1'b1, 1'b0);
+    /* verilator lint_off STMTDLY */
+    `TB_WAIT_UNTIL("outstanding descriptor read", 13, #10, delayed_response_pending)
+    /* verilator lint_on STMTDLY */
+    `TB_FATAL_IF_NOT_EQUAL("second cache index was also invalidated", walk_req_count_before + 1, walk_req_count)
+    mem_desc[VA_CRP_ALT[VA_WIDTH-1:PAGE_SHIFT]][PAGE_SHIFT +: PFN_WIDTH] = 8'hB4;
+    reg_write(4'h2, 32'h0000_0000);
+    reg_write(4'h2, 32'h8000_0006);
+    `TB_FATAL_IF_NOT_EQUAL("one CPU request awaits the held response", cpu_resp_count + 1, cpu_req_count)
+    hold_mem_response = 1'b0;
+    wait_for_resp();
+    `TB_FATAL_IF_NOT_EQUAL("outstanding read completes with its original descriptor", 16'h9434, resp_pa)
+    `TB_FATAL_IF_NOT_EQUAL("outstanding read succeeds", 1'b0, resp_fault)
+    check_enabled_read(VA_CRP_ALT, 16'hB434, 1'b0);
+    check_enabled_read(VA_CRP_ALT, 16'hB434, 1'b1);
+    // The prototype's enabled-to-enabled span update preserves a cached entry.
+    reg_write(4'h2, 32'h8000_0080);
+    check_enabled_read(VA_CRP_ALT, 16'hB434, 1'b1);
+
+    // A disabled probe stays a miss even when its TT entry would match after
+    // the concurrent re-enable takes effect.
+    reg_write(4'h3, make_ttr(8'h05, 8'h00, 1'b1, 1'b0, 1'b1, 1'b0, 1'b1));
+    reg_write(4'h2, 32'h0000_0006);
+    command_issue(TB_CMD_PROBE, VA_TC_IN_RANGE, FC_USER_DATA);
+    reg_write(4'h2, 32'h8000_0006);
+    wait_for_status();
+    `TB_FATAL_IF_NOT_EQUAL("pre-enable probe acknowledged", TB_CMD_PROBE, status_cmd)
+    `TB_FATAL_IF_NOT_EQUAL("pre-enable probe misses", 1'b0, status_hit)
+    `TB_FATAL_IF_NOT_EQUAL("pre-enable probe cannot report a TT match", '0, status_bits)
+    reg_write(4'h3, 32'h0000_0000);
+    reg_write(4'h2, 32'h8000_0080);
     reg_write(4'h1, {16'h0000, ALT_SRP_BASE});
     walk_req_count_before = walk_req_count;
     cpu_request(VA_SRP_INERT, FC_USER_DATA, 1'b1, 1'b0);
@@ -704,6 +871,11 @@ module mmu_core_tb;
     `TB_FATAL_IF_NOT_EQUAL("walker bus fault code", TB_RESP_FAULT_BUS, resp_fault_code)
     `TB_FATAL_IF_TRUE("walker fault does not report hit", resp_hit)
 
+    /* verilator lint_off STMTDLY */
+    #10;
+    /* verilator lint_on STMTDLY */
+    `TB_FATAL_IF_NOT_EQUAL("one response per accepted CPU request", cpu_req_count, cpu_resp_count)
+    `TB_FATAL_IF_NOT_EQUAL("one status per accepted local command", cmd_req_count, cmd_status_count)
     $display("[mmu_core_tb] PASS");
     $finish;
   end

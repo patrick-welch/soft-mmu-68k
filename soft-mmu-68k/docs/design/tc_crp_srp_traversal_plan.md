@@ -22,9 +22,8 @@ The current implementation is first-pass and deliberately limited.
   images.
 - `mmu_top` wires the relevant register state into the integrated path.
 - `CRP` is currently passed to the walker as the table base.
-- `TC` currently contributes a limited table-entry span/configuration role by
-  feeding the walker `table_entries_i` input from the low VPN-width portion of
-  the `TC` image.
+- `TC[31]` enables translation. When set, the low VPN-width bits below bit
+  31 supply the project-local table span to the walker.
 - The current walker behavior is minimal and single-level.
 - The current walker issues one descriptor read per miss.
 - The current default descriptor boundary is the 64-bit long-format page
@@ -64,8 +63,8 @@ architectural proof.
 
 | Term | Project-local meaning |
 | --- | --- |
-| Translation Control register | The software-visible register image stored by `mmu_regs` as `tc`. Current RTL uses part of this image as a table-entry span input; full Motorola field interpretation is deferred. |
-| TC | Short name for the Translation Control register image. In current traversal, the low VPN-width bits become `table_entries_cfg` for the single-level walker. |
+| Translation Control register | The register image stored by `mmu_regs` as `tc`. Bit 31 controls translation. The low bits supply the current single-level table span. |
+| TC | Short name for the Translation Control register. The walker takes its span from the low bits below E, up to the VPN width. |
 | Current Root Pointer | The software-visible root pointer image stored by `mmu_regs` as `crp`. In the current integrated path, it feeds the walker's table base. |
 | CRP | Short name for the Current Root Pointer register image. Current live traversal treats it as a table base, not as a fully decoded Motorola root-pointer descriptor tree. |
 | Supervisor Root Pointer | The software-visible root pointer image stored by `mmu_regs` as `srp`. Current RTL stores and exposes it, but does not use it for live root selection. |
@@ -92,14 +91,35 @@ architectural proof.
 | --- | --- | --- | --- | --- |
 | CRP | Software-visible current root pointer image in `mmu_regs`. | Feeds the walker table base in the live `mmu_top` subset. | Should CRP remain a simple base for Stage 1, or become a source for root descriptor traversal in later stages? | Current behavior is table-base use, not complete root descriptor semantics. |
 | SRP | Software-visible supervisor root pointer image in `mmu_regs`. | No live root-selection effect is visible in current RTL. | When should supervisor accesses select SRP, and how should unsupported SRP use behave? | Current SRP storage must not be mistaken for implemented supervisor traversal. |
-| TC | Software-visible 32-bit Translation Control image. | Low VPN-width bits feed `table_entries_cfg`; the walker treats that as a table span. | Which TC concepts should control enable, page size, address partition, levels, limit checks, and root selection? | Current behavior is a narrow configuration/span role only. |
+| TC | Software-visible 32-bit Translation Control image. | Bit 31 enables translation. Writing it clear flushes the TLB. Low bits set the walker span. | How should page size, address partition, levels, limit checks, and root selection be implemented? | MTC1 models the span calculation in isolation. |
 | TT0 | Transparent-translation register image. | TT qualification occurs before TLB/walker use. | Covered by TTR1, not expanded here. | TC1A should only preserve the ordering relationship. |
 | TT1 | Transparent-translation register image. | TT qualification occurs before TLB/walker use. | Covered by TTR1, not expanded here. | CPU/special and reserved FC TT behavior belongs to TTR1/FC follow-up work. |
 | MMUSR | Software-visible MMU status image. | No current hardware traversal producer updates the MMUSR image. | How should future traversal results map to MMUSR/PTEST status? | Covered by M1 and future mapper work; do not implement here. |
 
 ## Current Live Traversal Model
 
-The current live traversal model is:
+### Translation disabled
+
+Reset clears `TC.E` (bit 31). Each accepted CPU memory request returns its
+logical address truncated or zero-extended to the physical port width.
+The response has no hit or fault, and issues no descriptor read. The address
+port models no CPU-space strobes or coprocessor-register cycles.
+
+Every TC write with E clear invalidates all TLB entries. A TC write holds
+`req_ready_o` low for that cycle, so a held CPU request sees the new TC.
+An earlier accepted walk still returns its result once. Its refill is
+discarded if a disable write intervenes, even across a subsequent enable.
+The local probe and preload commands acknowledge without looking up or filling
+an entry when disabled. A disable write also cancels lookup eligibility for
+a queued command. A command accepted on the TC write edge sees the new E.
+
+Motorola describes address pass-through and ATC invalidation in the
+[MC68851 User's Manual, third edition, §§6.1.3–6.1.3.1](https://www.bitsavers.org/components/motorola/68000/68020/MC68851_PMMU_Users_Manual_3ed_1988.pdf).
+The register port accepts raw TC values. Motorola's configuration checks,
+disable-before-reprogramming rule, and instruction-level exceptions for
+disabled PTEST/PLOAD require additional implementation.
+
+### Translation enabled
 
 1. A request arrives through `mmu_top` with virtual address, function code,
    read/write intent, and fetch intent.
@@ -133,7 +153,7 @@ model.
 
 | TC-related concept | Current repo behavior | Known gap | Future test/spec question | Notes |
 | --- | --- | --- | --- | --- |
-| translation enable / disabled state | `TC` resets to zero. Current live traversal does not fully implement Motorola enable/disable semantics; zero table entries make walker misses fail the current span check. | No complete architectural enable/disable model. | Should disabled translation bypass, fault, or preserve current local behavior for a staged subset? | Do not infer full enable semantics from reset comments alone. |
+| translation enable / disabled state | Reset clears TC.E. With E clear the CPU port passes addresses through. A TC write with E clear flushes the entire TLB. | Coprocessor exceptions and TC consistency checks are deferred. | How should these be reported through a future CPU interface? | With E set, a zero span still faults a walker miss before any descriptor read. |
 | page size / page offset width | `PAGE_SHIFT` is an RTL parameter, not a decoded TC field. | TC-driven page size is not implemented. | Should TC later select page size, and which page sizes are in scope? | Current benches may use small page shifts for simulation. |
 | table index partitioning | Current walker uses the full VPN as a single index. | No TC-driven split into multiple indexes. | How should TC partition virtual address bits among root, pointer, and page levels? | Phrase future work as concepts unless field names are confirmed in-source. |
 | number of levels | Current walker is single-level. | No live multi-level traversal. | Which TC concepts should select one-level, two-level, or broader traversal in future packets? | Stage 1 should stay single-level. |
