@@ -29,11 +29,12 @@ Implemented now:
   bus shims.
 - `P8/P8b`: `mmu_top` integration, direct-mapped lookup/refill path, and a
   first-pass `TT0/TT1` qualification path ahead of the translated flow.
-- `TCE1`: after reset an ordinary CPU fetch, read, or write returns its
-  logical address directly, without a descriptor fetch or permission fault.
-  Set `TC[31]` to use the existing single-level walker. Writing TC with bit 31
-  clear flushes the TLB and prevents an outstanding walk from restoring a
-  stale entry.
+- `TCE1` lets an ordinary CPU fetch, read, or write after reset return its
+  logical address at the physical port width without fetching a descriptor.
+  Setting `TC.E` (bit 31) enables transparent translation, TLB lookup and,
+  on a translated miss, the single-level walker. Every write with E clear
+  flushes the TLB and prevents a late refill. A raw TC write that keeps E set
+  preserves cached entries.
 - `P9a/P9b`: shared testbench helpers and a stronger integration bench.
 - `P10a/P10b`: freestanding 68k software-side validation scaffold for TT,
   permissions, and translated-vs-transparent maintenance behavior.
@@ -92,13 +93,19 @@ The scripts below capture the current first-pass known-good regression flow from
 a clean checkout. They are intentionally narrow wrappers around the proven
 Icarus and Verilator commands; they do not claim full Motorola compliance.
 
-Run them from the repo root:
+Run these from the HDL project directory (`soft-mmu-68k/` under the Git root).
 
 ```sh
-scripts/run_iverilog_unit.sh
-scripts/run_iverilog_integ.sh
-scripts/run_verilator_lint.sh
+bash scripts/run_iverilog_unit.sh
+bash scripts/run_iverilog_integ.sh
+bash scripts/run_verilator_lint.sh
 ```
+
+The core bench checks reset access, TC write ordering and stale refills. The
+board-top bench runs in Icarus integration. Verilator lints the board top
+itself. [Core bench](tb/integ/mmu_core_tb.sv) ·
+[Board-top bench](tb/integ/basys3_mmu_demo_tb.sv) ·
+[HDL Regression #95](https://github.com/patrick-welch/soft-mmu-68k/actions/runs/45520931436/job/138892280910)
 
 The Verilator lint script runs with `-Wno-fatal` so accepted pre-existing
 warnings remain visible without failing the full lint pass. Current tolerated
@@ -166,6 +173,12 @@ The current proven target is `perm_check`. The committed CSV lives at
 `tb/unit/perm_check_tb.sv` consumes it as an additional verification layer.
 This does not replace directed RTL tests or integration benches.
 
+The separate MTC1 model calculates the span before a walk. At a 32-bit VPN
+width its mask includes `TC.E`. The traversal plan records the resulting
+difference and identifies the tutorial, Wiki and verification documents that
+still describe the earlier path.
+[TCE1 coverage and model limits](docs/design/tc_crp_srp_traversal_plan.md#tce1-regression-and-model-coverage)
+
 Software scaffold:
 
 ```sh
@@ -180,9 +193,12 @@ make -f sw/build/Makefile all \
 
 On reset, `fpga/basys3/tops/top_mmu_demo.v` programs:
 - `CRP = 0x001000`
-- `TC = 0x80000FFF` (translation enabled, project-local span of `0xFFF` entries)
+- `TC = 0x80000FFF` (E set and a project-local span of `0xFFF` entries)
 - `TT0 = 0xF000F800`
 - `TT1 = 0x00000000`
+
+The demo uses this TC value to exercise the single-level walker. Architectural
+MC68851 page geometry and TC consistency checks are outside the demo.
 
 The built-in descriptor responder models four small cases:
 - page `0`: valid user-accessible translated page at PFN `0x040`
@@ -237,19 +253,36 @@ demo. See `fpga/constraints/README.md` for details.
 
 ### What the board demo proves
 
-The successful Basys 3 smoke run shows that the current FPGA harness can:
-- configure the MMU register block from the demo top
-- execute translated access and probe flows on hardware
-- show a TT-qualified identity-style result distinct from a translated result
-- show a user permission-fault case on the board
-- rerun the canned flow from switch settings without editing HDL
+#### Historical Basys 3 smoke run
 
-Observed post-bring-up smoke cases from the workspace note
-`../smoke-results/test-results.txt`:
-- all switches low: translated access/probe smoke case
-- `SW15=1`: TT-qualified identity-style smoke case
-- `SW8=1`: user access to the supervisor-only translated page faults
-- `SW12=1` and `SW8=1`: supervisor access to that same translated page succeeds
+The pre-TCE1 bring-up record describes physical switch tests of translated
+access/probe, transparent translation, and user versus supervisor access to
+a protected page. It cites the original workspace note
+`../smoke-results/test-results.txt`.
+[Pre-TCE1 record](https://github.com/patrick-welch/soft-mmu-68k/blob/ad5122b08030241072bb2dbab34cecfa13ad855e/soft-mmu-68k/README.md#what-the-board-demo-proves)
+
+#### TCE1 board-top simulation
+
+Icarus produced the following settled 16-bit LED words in HDL Regression
+#95. The testbench drives the board top's clock, reset and switches and
+compares the LED pins with the expectations from HW1B.
+[Board-top bench](tb/integ/basys3_mmu_demo_tb.sv) ·
+[CI log](https://github.com/patrick-welch/soft-mmu-68k/actions/runs/45520931436/job/138892280910) ·
+[HW1B expected readings](https://github.com/patrick-welch/soft-mmu-68k/issues/46#issuecomment-5260860469)
+
+| Switches (hex) | Case | Expected LEDs (hex) | Simulated LEDs (hex) |
+| --- | --- | --- | --- |
+| `0000` | Translated user access and probe | `801C` | `801C` |
+| `8000` | Transparent translation | `0028` | `0028` |
+| `0100` | User access to a supervisor-only page | `825E` | `825E` |
+| `1100` | Supervisor access to the same page | `821C` | `821C` |
+
+PR #49 also reports Yosys synthesis. TCE1 has not been programmed or
+physically validated on a Basys 3, and has no Vivado timing-closure result.
+The approved HW1B physical test target is commit
+`ad5122b08030241072bb2dbab34cecfa13ad855e`.
+[TCE1 verification](https://github.com/patrick-welch/soft-mmu-68k/pull/49) ·
+[HW1B decision](https://github.com/patrick-welch/soft-mmu-68k/issues/46#issuecomment-5260928107)
 
 ### What the board demo does not prove
 
@@ -263,9 +296,6 @@ It does not prove:
 
 ## Known issues and bring-up notes
 
-- The board demo is intentionally a smoke demo. Treat it as proof that the
-  current subset builds and toggles correctly on hardware, not as full-system
-  validation.
 - `resp_hit_o` is reserved for translated/TLB-backed hits. A successful TT
   bypass reports success through `resp_valid_o`/`status_hit_o`, but does not
   claim a translated hit.
